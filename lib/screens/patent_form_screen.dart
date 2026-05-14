@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:bpp/core/pdf_utils.dart';
 import '../services/patent_service.dart';
 
 class PatentFormScreen extends StatefulWidget {
@@ -23,11 +24,16 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
   final _detailedDescCtrl = TextEditingController();
   final _keywordsCtrl = TextEditingController();
   final _newInventorCtrl = TextEditingController();
+  final _attorneysCtrl = TextEditingController();
+  final _customCategoryCtrl = TextEditingController();
 
   String _status = 'Draft';
   String? _category;
+  bool _showCustomCategory = false;
   DateTime? _filingDate;
   DateTime? _publicationDate;
+  DateTime? _grantDate;
+  DateTime? _validityDate;
 
   List<dynamic> _allInventors = [];
   List<String> _selectedInventorIds = [];
@@ -37,7 +43,11 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
   String? _fileBase64;
   String? _fileName;
   String? _mimeType;
+  String? _coverBase64;
+  String? _coverName;
+  String? _coverMime;
   String? _existingFileUrl;
+  String? _existingCoverUrl;
 
   bool _loading = false;
   bool _saving = false;
@@ -45,7 +55,7 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
 
   bool get _isEdit => widget.patent != null;
 
-  static const _statuses = ['Draft', 'Published', 'Approved', 'Rejected'];
+  static const _statuses = ['Draft', 'Published'];
   static const _categories = [
     'AI / Machine Learning',
     'Mechanical',
@@ -77,7 +87,9 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
       _claimsCtrl,
       _detailedDescCtrl,
       _keywordsCtrl,
-      _newInventorCtrl
+      _newInventorCtrl,
+      _attorneysCtrl,
+      _customCategoryCtrl,
     ]) {
       c.dispose();
     }
@@ -94,13 +106,33 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
     _claimsCtrl.text = p['claims'] ?? '';
     _detailedDescCtrl.text = p['detailed_description'] ?? '';
     _keywordsCtrl.text = ((p['keywords'] as List?) ?? []).join(', ');
+    _attorneysCtrl.text = p['attorneys'] ?? '';
     _status = p['status'] ?? 'Draft';
-    _category = p['category'];
     _existingFileUrl = p['file_url'];
-    if (p['filing_date'] != null)
+    _existingCoverUrl = p['cover_url'];
+
+    final cat = p['category'] as String?;
+    if (cat != null && !_categories.contains(cat)) {
+      _category = 'Other';
+      _showCustomCategory = true;
+      _customCategoryCtrl.text = cat;
+    } else {
+      _category = cat;
+    }
+
+    if (p['filing_date'] != null) {
       _filingDate = DateTime.tryParse(p['filing_date']);
-    if (p['publication_date'] != null)
+    }
+    if (p['publication_date'] != null) {
       _publicationDate = DateTime.tryParse(p['publication_date']);
+    }
+    if (p['grant_date'] != null) {
+      _grantDate = DateTime.tryParse(p['grant_date']);
+    }
+    if (p['validity_date'] != null) {
+      _validityDate = DateTime.tryParse(p['validity_date']);
+    }
+
     _selectedInventorIds = (p['patent_inventors'] as List? ?? [])
         .map((pi) => pi['inventors']?['id'] as String?)
         .whereType<String>()
@@ -128,7 +160,7 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
     }
   }
 
-  Future<void> _pickDate(bool isFiling) async {
+  Future<void> _pickDate(String field) async {
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -137,11 +169,10 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
     );
     if (picked == null) return;
     setState(() {
-      if (isFiling) {
-        _filingDate = picked;
-      } else {
-        _publicationDate = picked;
-      }
+      if (field == 'filing') _filingDate = picked;
+      if (field == 'publication') _publicationDate = picked;
+      if (field == 'grant') _grantDate = picked;
+      if (field == 'validity') _validityDate = picked;
     });
   }
 
@@ -151,10 +182,22 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (file.bytes == null) return;
+
+    String? coverBase64;
+    try {
+      coverBase64 = await PdfUtils.generatePdfCoverBase64(file.bytes!);
+    } catch (_) {
+      coverBase64 = null;
+    }
+
     setState(() {
       _fileBase64 = base64Encode(file.bytes!);
       _fileName = file.name;
       _mimeType = 'application/pdf';
+      _coverBase64 = coverBase64;
+      _coverName = '${file.name.split('.').first}_cover.png';
+      _coverMime = 'image/png';
+      _existingCoverUrl = null;
     });
   }
 
@@ -169,10 +212,50 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
         _newInventorCtrl.clear();
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
+  }
+
+  Future<void> _deleteInventor(String inventorId, String name) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Inventor'),
+        content: Text('Delete "$name" from the system? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await PatentService.deleteInventor(inventorId);
+      setState(() {
+        _allInventors.removeWhere((inv) => inv['id'] == inventorId);
+        _selectedInventorIds.remove(inventorId);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  String? get _effectiveCategory {
+    if (_category == 'Other') {
+      final custom = _customCategoryCtrl.text.trim();
+      return custom.isNotEmpty ? custom : null;
+    }
+    return _category;
   }
 
   Future<void> _submit() async {
@@ -186,6 +269,9 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
       status: _status,
       assignee:
           _assigneeCtrl.text.trim().isEmpty ? null : _assigneeCtrl.text.trim(),
+      attorneys: _attorneysCtrl.text.trim().isEmpty
+          ? null
+          : _attorneysCtrl.text.trim(),
       abstract:
           _abstractCtrl.text.trim().isEmpty ? null : _abstractCtrl.text.trim(),
       technicalField: _technicalFieldCtrl.text.trim().isEmpty
@@ -198,7 +284,7 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
       detailedDescription: _detailedDescCtrl.text.trim().isEmpty
           ? null
           : _detailedDescCtrl.text.trim(),
-      category: _category,
+      category: _effectiveCategory,
       keywords: _keywordsCtrl.text.trim().isEmpty
           ? []
           : _keywordsCtrl.text
@@ -208,11 +294,17 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
               .toList(),
       filingDate: _filingDate?.toIso8601String().substring(0, 10),
       publicationDate: _publicationDate?.toIso8601String().substring(0, 10),
+      grantDate: _grantDate?.toIso8601String().substring(0, 10),
+      validityDate: _validityDate?.toIso8601String().substring(0, 10),
       inventorIds: _selectedInventorIds,
       citedPatentIds: _selectedCitedIds,
       fileBase64: _fileBase64,
       fileName: _fileName,
       mimeType: _mimeType,
+      coverBase64: _coverBase64,
+      coverName: _coverName,
+      coverMime: _coverMime,
+      existingCoverUrl: _fileBase64 == null ? _existingCoverUrl : null,
       existingFileUrl: _existingFileUrl,
     );
     try {
@@ -231,7 +323,7 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
+    const color = Color(0xFF6C3CE1);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF6F4FF);
     final cardBg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
@@ -282,6 +374,8 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                           child: Text(_error!,
                               style: const TextStyle(color: Colors.red)),
                         ),
+
+                      // ── CORE ───────────────────────────────────────
                       _sectionHeader('Core Information', color),
                       const SizedBox(height: 10),
                       _card(
@@ -304,6 +398,14 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                               controller: _assigneeCtrl,
                               decoration:
                                   _deco('Company or individual owner'))),
+                      const SizedBox(height: 12),
+                      _card(
+                          cardBg,
+                          color,
+                          'Attorneys',
+                          TextFormField(
+                              controller: _attorneysCtrl,
+                              decoration: _deco('e.g. John Smith, Jane Doe'))),
                       const SizedBox(height: 12),
                       Row(children: [
                         Expanded(
@@ -339,11 +441,35 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                               style: const TextStyle(
                                                   fontSize: 12))))
                                       .toList(),
-                                  onChanged: (v) =>
-                                      setState(() => _category = v),
+                                  onChanged: (v) => setState(() {
+                                    _category = v;
+                                    _showCustomCategory = v == 'Other';
+                                    if (!_showCustomCategory) {
+                                      _customCategoryCtrl.clear();
+                                    }
+                                  }),
                                 ))),
                       ]),
-                      const SizedBox(height: 12),
+                      if (_showCustomCategory) ...[
+                        const SizedBox(height: 12),
+                        _card(
+                            cardBg,
+                            color,
+                            'Custom Category',
+                            TextFormField(
+                              controller: _customCategoryCtrl,
+                              decoration: _deco('Enter your category...'),
+                              validator: (v) => _showCustomCategory &&
+                                      (v == null || v.trim().isEmpty)
+                                  ? 'Please enter a category'
+                                  : null,
+                            )),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // ── DATES ──────────────────────────────────────
+                      _sectionHeader('Dates', color),
+                      const SizedBox(height: 10),
                       Row(children: [
                         Expanded(
                             child: _card(
@@ -354,7 +480,7 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                     value: _filingDate,
                                     hint: 'Select date',
                                     color: color,
-                                    onTap: () => _pickDate(true)))),
+                                    onTap: () => _pickDate('filing')))),
                         const SizedBox(width: 12),
                         Expanded(
                             child: _card(
@@ -365,9 +491,35 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                     value: _publicationDate,
                                     hint: 'Select date',
                                     color: color,
-                                    onTap: () => _pickDate(false)))),
+                                    onTap: () => _pickDate('publication')))),
+                      ]),
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        Expanded(
+                            child: _card(
+                                cardBg,
+                                color,
+                                'Grant Date',
+                                _DatePicker(
+                                    value: _grantDate,
+                                    hint: 'Select date',
+                                    color: color,
+                                    onTap: () => _pickDate('grant')))),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: _card(
+                                cardBg,
+                                color,
+                                'Validity Date',
+                                _DatePicker(
+                                    value: _validityDate,
+                                    hint: 'Select date',
+                                    color: color,
+                                    onTap: () => _pickDate('validity')))),
                       ]),
                       const SizedBox(height: 20),
+
+                      // ── CONTENT ────────────────────────────────────
                       _sectionHeader('Patent Content', color),
                       const SizedBox(height: 10),
                       _card(
@@ -431,6 +583,8 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                               decoration: _deco(
                                   'Comma separated: AI, neural network...'))),
                       const SizedBox(height: 20),
+
+                      // ── INVENTORS ──────────────────────────────────
                       _sectionHeader('Inventors', color),
                       const SizedBox(height: 10),
                       _card(
@@ -446,21 +600,42 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                         color: Colors.grey.shade500,
                                         fontSize: 13))
                               else
-                                ..._allInventors.map((inv) => CheckboxListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      dense: true,
-                                      activeColor: color,
-                                      title: Text(inv['name'] ?? ''),
-                                      value: _selectedInventorIds
-                                          .contains(inv['id']),
-                                      onChanged: (v) => setState(() {
-                                        if (v == true) {
-                                          _selectedInventorIds.add(inv['id']);
-                                        } else {
-                                          _selectedInventorIds
-                                              .remove(inv['id']);
-                                        }
-                                      }),
+                                ..._allInventors.map((inv) => Row(
+                                      children: [
+                                        Expanded(
+                                          child: CheckboxListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            dense: true,
+                                            activeColor: color,
+                                            title: Text(inv['name'] ?? ''),
+                                            value: _selectedInventorIds
+                                                .contains(inv['id']),
+                                            onChanged: (v) => setState(() {
+                                              if (v == true) {
+                                                _selectedInventorIds
+                                                    .add(inv['id']);
+                                              } else {
+                                                _selectedInventorIds
+                                                    .remove(inv['id']);
+                                              }
+                                            }),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () => _deleteInventor(
+                                              inv['id'], inv['name'] ?? ''),
+                                          child: Padding(
+                                            padding:
+                                                const EdgeInsets.only(right: 4),
+                                            child: Icon(
+                                              Icons.delete_outline_rounded,
+                                              size: 18,
+                                              color: Colors.red
+                                                  .withValues(alpha: 0.7),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     )),
                               const Divider(height: 20),
                               Row(children: [
@@ -481,6 +656,8 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                             ],
                           )),
                       const SizedBox(height: 20),
+
+                      // ── CITATIONS ──────────────────────────────────
                       _sectionHeader('Citations', color),
                       const SizedBox(height: 10),
                       _card(
@@ -523,6 +700,8 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                           ))
                                       .toList())),
                       const SizedBox(height: 20),
+
+                      // ── DOCUMENT ───────────────────────────────────
                       _sectionHeader('Document', color),
                       const SizedBox(height: 10),
                       _card(
@@ -551,9 +730,46 @@ class _PatentFormScreenState extends State<PatentFormScreen> {
                                         : 'Upload PDF',
                                     style: TextStyle(color: color)),
                               ),
+                              if (_coverBase64 != null ||
+                                  (_existingCoverUrl != null &&
+                                      _fileBase64 == null)) ...[
+                                const SizedBox(height: 12),
+                                Text('Cover preview',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                        fontSize: 12)),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: _coverBase64 != null
+                                      ? Image.memory(
+                                          base64Decode(_coverBase64!),
+                                          width: double.infinity,
+                                          height: 140,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.network(
+                                          _existingCoverUrl!,
+                                          width: double.infinity,
+                                          height: 140,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(
+                                            height: 140,
+                                            color: Colors.grey.shade900,
+                                            alignment: Alignment.center,
+                                            child: const Icon(
+                                              Icons.image_not_supported,
+                                              color: Colors.white54,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ],
                             ],
                           )),
                       const SizedBox(height: 28),
+
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -659,10 +875,14 @@ class _DatePicker extends StatelessWidget {
       child: Row(children: [
         Icon(Icons.calendar_today_rounded, size: 14, color: color),
         const SizedBox(width: 8),
-        Text(
-          value != null ? value!.toIso8601String().substring(0, 10) : hint,
-          style: TextStyle(
-              color: value != null ? null : Colors.grey.shade500, fontSize: 13),
+        Flexible(
+          child: Text(
+            value != null ? value!.toIso8601String().substring(0, 10) : hint,
+            style: TextStyle(
+                color: value != null ? null : Colors.grey.shade500,
+                fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ]),
     );

@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:bpp/core/json_utils.dart';
+import 'package:bpp/core/pdf_utils.dart';
 import '../services/scholar_service.dart';
 
 class ScholarFormScreen extends StatefulWidget {
@@ -13,11 +15,11 @@ class ScholarFormScreen extends StatefulWidget {
 }
 
 class _ScholarFormScreenState extends State<ScholarFormScreen> {
-  static const color = Color(0xFF00BCD4);
+  static const color = Color(0xFF7C3AED);
 
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
-  final _authorsCtrl = TextEditingController(); // comma-separated
+  final _authorsCtrl = TextEditingController();
   final _abstractCtrl = TextEditingController();
   final _venueCtrl = TextEditingController();
   final _volumeCtrl = TextEditingController();
@@ -27,14 +29,14 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
   final _issnCtrl = TextEditingController();
   final _isbnCtrl = TextEditingController();
   final _keywordsCtrl = TextEditingController();
-  final _institutionCtrl = TextEditingController();
-  final _departmentCtrl = TextEditingController();
-  final _advisorCtrl = TextEditingController();
+  final _orgNameCtrl = TextEditingController();
+  final _orgDeptCtrl = TextEditingController();
+  final _orgLocationCtrl = TextEditingController();
+  final _orgWebsiteCtrl = TextEditingController();
   final _yearCtrl = TextEditingController();
 
   String _status = 'Draft';
   String? _venueType;
-  String? _degree;
 
   List<dynamic> _allPapers = [];
   List<String> _selectedRefIds = [];
@@ -42,7 +44,11 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
   String? _fileBase64;
   String? _fileName;
   String? _mimeType;
+  String? _coverBase64;
+  String? _coverName;
+  String? _coverMime;
   String? _existingFileUrl;
+  String? _existingCoverUrl;
 
   bool _loading = false;
   bool _saving = false;
@@ -57,7 +63,6 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
     'Preprint',
     'Workshop'
   ];
-  static const _degrees = ['B.Tech', 'M.Tech', 'MS', 'PhD'];
   static const _statuses = ['Draft', 'Published'];
 
   @override
@@ -81,9 +86,10 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
       _issnCtrl,
       _isbnCtrl,
       _keywordsCtrl,
-      _institutionCtrl,
-      _departmentCtrl,
-      _advisorCtrl,
+      _orgNameCtrl,
+      _orgDeptCtrl,
+      _orgLocationCtrl,
+      _orgWebsiteCtrl,
       _yearCtrl,
     ]) {
       c.dispose();
@@ -94,7 +100,7 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
   void _populateForm() {
     final p = widget.paper!;
     _titleCtrl.text = p['title'] ?? '';
-    _authorsCtrl.text = ((p['authors'] as List?) ?? []).join(', ');
+    _authorsCtrl.text = parseStringList(p['authors']).join(', ');
     _abstractCtrl.text = p['abstract'] ?? '';
     _venueCtrl.text = p['venue'] ?? '';
     _volumeCtrl.text = p['volume'] ?? '';
@@ -103,17 +109,18 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
     _doiCtrl.text = p['doi'] ?? '';
     _issnCtrl.text = p['issn'] ?? '';
     _isbnCtrl.text = p['isbn'] ?? '';
-    _keywordsCtrl.text = ((p['keywords'] as List?) ?? []).join(', ');
-    _institutionCtrl.text = p['institution'] ?? '';
-    _departmentCtrl.text = p['department'] ?? '';
-    _advisorCtrl.text = p['advisor'] ?? '';
+    _keywordsCtrl.text = parseStringList(p['keywords']).join(', ');
+    _orgNameCtrl.text = p['org_name'] ?? '';
+    _orgDeptCtrl.text = p['org_department'] ?? '';
+    _orgLocationCtrl.text = p['org_location'] ?? '';
+    _orgWebsiteCtrl.text = p['org_website'] ?? '';
     _yearCtrl.text = p['year']?.toString() ?? '';
     _status = p['status'] ?? 'Draft';
     _venueType = p['venue_type'];
-    _degree = p['degree'];
     _existingFileUrl = p['file_url'];
+    _existingCoverUrl = p['cover_url'];
 
-    _selectedRefIds = (p['references_made'] as List? ?? [])
+    _selectedRefIds = parseJsonList(p['references_made'])
         .map((r) => r['cited_paper']?['id'] as String?)
         .whereType<String>()
         .toList();
@@ -143,10 +150,22 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (file.bytes == null) return;
+
+    String? coverBase64;
+    try {
+      coverBase64 = await PdfUtils.generatePdfCoverBase64(file.bytes!);
+    } catch (_) {
+      coverBase64 = null;
+    }
+
     setState(() {
       _fileBase64 = base64Encode(file.bytes!);
       _fileName = file.name;
       _mimeType = 'application/pdf';
+      _coverBase64 = coverBase64;
+      _coverName = '${file.name.split('.').first}_cover.png';
+      _coverMime = 'image/png';
+      _existingCoverUrl = null;
     });
   }
 
@@ -178,19 +197,24 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
       issn: _issnCtrl.text.trim().isEmpty ? null : _issnCtrl.text.trim(),
       isbn: _isbnCtrl.text.trim().isEmpty ? null : _isbnCtrl.text.trim(),
       keywords: _parseList(_keywordsCtrl.text),
-      institution: _institutionCtrl.text.trim().isEmpty
+      orgName:
+          _orgNameCtrl.text.trim().isEmpty ? null : _orgNameCtrl.text.trim(),
+      orgDepartment:
+          _orgDeptCtrl.text.trim().isEmpty ? null : _orgDeptCtrl.text.trim(),
+      orgLocation: _orgLocationCtrl.text.trim().isEmpty
           ? null
-          : _institutionCtrl.text.trim(),
-      department: _departmentCtrl.text.trim().isEmpty
+          : _orgLocationCtrl.text.trim(),
+      orgWebsite: _orgWebsiteCtrl.text.trim().isEmpty
           ? null
-          : _departmentCtrl.text.trim(),
-      advisor:
-          _advisorCtrl.text.trim().isEmpty ? null : _advisorCtrl.text.trim(),
-      degree: _degree,
+          : _orgWebsiteCtrl.text.trim(),
       citedPaperIds: _selectedRefIds,
       fileBase64: _fileBase64,
       fileName: _fileName,
       mimeType: _mimeType,
+      coverBase64: _coverBase64,
+      coverName: _coverName,
+      coverMime: _coverMime,
+      existingCoverUrl: _fileBase64 == null ? _existingCoverUrl : null,
       existingFileUrl: _existingFileUrl,
     );
 
@@ -267,10 +291,9 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                   style: const TextStyle(color: Colors.red)),
                             ),
 
-                          // ── CORE ──────────────────────────────────────────
+                          // ── CORE ────────────────────────────────────────
                           _sectionHeader('Core Information'),
                           const SizedBox(height: 10),
-
                           _card(
                               cardBg,
                               'Title *',
@@ -282,20 +305,18 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                     : null,
                               )),
                           const SizedBox(height: 12),
-
                           _card(
                               cardBg,
                               'Authors * (comma separated)',
                               TextFormField(
                                 controller: _authorsCtrl,
-                                decoration: _deco(
-                                    'e.g. enter AuthorName1, enter AuthorName2'),
+                                decoration:
+                                    _deco('e.g. AuthorName1, AuthorName2'),
                                 validator: (v) => v == null || v.trim().isEmpty
                                     ? 'Required'
                                     : null,
                               )),
                           const SizedBox(height: 12),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
@@ -325,10 +346,9 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                           ]),
                           const SizedBox(height: 20),
 
-                          // ── VENUE ─────────────────────────────────────────
+                          // ── VENUE ──────────────────────────────────────
                           _sectionHeader('Publication Venue'),
                           const SizedBox(height: 10),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
@@ -357,7 +377,6 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                     ))),
                           ]),
                           const SizedBox(height: 12),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
@@ -387,7 +406,6 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                     ))),
                           ]),
                           const SizedBox(height: 12),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
@@ -418,10 +436,9 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                           ]),
                           const SizedBox(height: 20),
 
-                          // ── CONTENT ───────────────────────────────────────
+                          // ── CONTENT ────────────────────────────────────
                           _sectionHeader('Content'),
                           const SizedBox(height: 10),
-
                           _card(
                               cardBg,
                               'Abstract',
@@ -431,7 +448,6 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                 decoration: _deco('Brief summary of the paper'),
                               )),
                           const SizedBox(height: 12),
-
                           _card(
                               cardBg,
                               'Keywords (comma separated)',
@@ -442,63 +458,56 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                               )),
                           const SizedBox(height: 20),
 
-                          // ── INSTITUTION (IIIT style) ───────────────────────
-                          _sectionHeader('Institution / IIIT Details'),
+                          // ── ORGANISATION ───────────────────────────────
+                          _sectionHeader('Organisation Details'),
                           const SizedBox(height: 10),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
                                     cardBg,
-                                    'Institution',
+                                    'Organisation Name',
                                     TextFormField(
-                                      controller: _institutionCtrl,
-                                      decoration: _deco('e.g. IIIT Hyderabad'),
+                                      controller: _orgNameCtrl,
+                                      decoration:
+                                          _deco('e.g. MIT, Google Research'),
                                     ))),
                             const SizedBox(width: 12),
                             Expanded(
                                 child: _card(
                                     cardBg,
-                                    'Department',
+                                    'Department / Division',
                                     TextFormField(
-                                      controller: _departmentCtrl,
-                                      decoration: _deco('e.g. CSE, ECE'),
+                                      controller: _orgDeptCtrl,
+                                      decoration:
+                                          _deco('e.g. Engineering, Research'),
                                     ))),
                           ]),
                           const SizedBox(height: 12),
-
                           Row(children: [
                             Expanded(
                                 child: _card(
                                     cardBg,
-                                    'Advisor / Supervisor',
+                                    'Location',
                                     TextFormField(
-                                      controller: _advisorCtrl,
-                                      decoration: _deco('Prof. Name'),
+                                      controller: _orgLocationCtrl,
+                                      decoration: _deco('e.g. Boston, USA'),
                                     ))),
                             const SizedBox(width: 12),
                             Expanded(
                                 child: _card(
                                     cardBg,
-                                    'Degree',
-                                    DropdownButtonFormField<String>(
-                                      value: _degree,
-                                      decoration: _deco('Select'),
-                                      dropdownColor: cardBg,
-                                      items: _degrees
-                                          .map((d) => DropdownMenuItem(
-                                              value: d, child: Text(d)))
-                                          .toList(),
-                                      onChanged: (v) =>
-                                          setState(() => _degree = v),
+                                    'Website',
+                                    TextFormField(
+                                      controller: _orgWebsiteCtrl,
+                                      decoration: _deco('e.g. https://mit.edu'),
+                                      keyboardType: TextInputType.url,
                                     ))),
                           ]),
                           const SizedBox(height: 20),
 
-                          // ── REFERENCES ────────────────────────────────────
+                          // ── REFERENCES ─────────────────────────────────
                           _sectionHeader('References (cites other papers)'),
                           const SizedBox(height: 10),
-
                           _card(
                               cardBg,
                               'Select Referenced Papers',
@@ -510,8 +519,7 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                   : Column(
                                       children: _allPapers.map((p) {
                                         final authors =
-                                            (p['authors'] as List? ?? [])
-                                                .cast<String>();
+                                            parseStringList(p['authors']);
                                         return CheckboxListTile(
                                           contentPadding: EdgeInsets.zero,
                                           dense: true,
@@ -546,10 +554,9 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                     )),
                           const SizedBox(height: 20),
 
-                          // ── FILE ──────────────────────────────────────────
+                          // ── FILE ───────────────────────────────────────
                           _sectionHeader('Document'),
                           const SizedBox(height: 10),
-
                           _card(
                               cardBg,
                               'PDF Upload',
@@ -576,11 +583,46 @@ class _ScholarFormScreenState extends State<ScholarFormScreen> {
                                       style: const TextStyle(color: color),
                                     ),
                                   ),
+                                  if (_coverBase64 != null ||
+                                      (_existingCoverUrl != null &&
+                                          _fileBase64 == null)) ...[
+                                    const SizedBox(height: 12),
+                                    Text('Cover preview',
+                                        style: TextStyle(
+                                            color: Colors.grey.shade500,
+                                            fontSize: 12)),
+                                    const SizedBox(height: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: _coverBase64 != null
+                                          ? Image.memory(
+                                              base64Decode(_coverBase64!),
+                                              width: double.infinity,
+                                              height: 140,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Image.network(
+                                              _existingCoverUrl!,
+                                              width: double.infinity,
+                                              height: 140,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) =>
+                                                  Container(
+                                                height: 140,
+                                                color: Colors.grey.shade900,
+                                                alignment: Alignment.center,
+                                                child: const Icon(
+                                                  Icons.image_not_supported,
+                                                  color: Colors.white54,
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                  ],
                                 ],
                               )),
                           const SizedBox(height: 28),
 
-                          // Submit
                           SizedBox(
                             width: double.infinity,
                             height: 52,

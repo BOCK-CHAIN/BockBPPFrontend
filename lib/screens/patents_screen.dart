@@ -1,4 +1,7 @@
+// lib/screens/patents_screen.dart
 import 'package:flutter/material.dart';
+
+import 'package:bpp/core/json_utils.dart';
 import '../services/patent_service.dart';
 import 'patent_detail_screen.dart';
 import 'patent_form_screen.dart';
@@ -25,7 +28,7 @@ class _PatentsScreenState extends State<PatentsScreen> {
   String? _error;
   String? _filterStatus;
 
-  static const _statuses = ['Draft', 'Published', 'Approved', 'Rejected'];
+  static const _statuses = ['Draft', 'Published'];
 
   @override
   void initState() {
@@ -80,10 +83,9 @@ class _PatentsScreenState extends State<PatentsScreen> {
       await PatentService.deletePatent(id);
       _load();
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
     }
   }
 
@@ -269,6 +271,7 @@ class _PatentsScreenState extends State<PatentsScreen> {
       );
 }
 
+// ── Filter chip ───────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -277,29 +280,30 @@ class _FilterChip extends StatelessWidget {
       {required this.label, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(20),
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color:
+                selected ? Colors.white : Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                color: selected ? const Color(0xFF6C3CE1) : Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              )),
         ),
-        child: Text(label,
-            style: TextStyle(
-              color: selected ? const Color(0xFF6C3CE1) : Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            )),
-      ),
-    );
-  }
+      );
 }
 
+// ── Patent card ───────────────────────────────────────────────────────────────
 class _PatentCard extends StatelessWidget {
   static const color = Color(0xFF6C3CE1);
+
   final Map<String, dynamic> patent;
   final VoidCallback onTap;
   final VoidCallback onEdit;
@@ -312,18 +316,8 @@ class _PatentCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  Color _statusColor(String? s) {
-    switch (s) {
-      case 'Approved':
-        return Colors.green;
-      case 'Published':
-        return Colors.blue;
-      case 'Rejected':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _statusColor(String? s) =>
+      s == 'Published' ? Colors.blue : Colors.orange;
 
   @override
   Widget build(BuildContext context) {
@@ -331,7 +325,8 @@ class _PatentCard extends StatelessWidget {
     final cardBg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
     final status = patent['status'] as String?;
     final appNum = patent['application_number'] as String?;
-    final inventors = (patent['patent_inventors'] as List? ?? [])
+    final coverUrl = patent['cover_url'] as String?;
+    final inventors = parseJsonList(patent['patent_inventors'])
         .map((pi) => pi['inventors']?['name'] as String?)
         .whereType<String>()
         .toList();
@@ -339,124 +334,153 @@ class _PatentCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withValues(alpha: 0.15)),
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.lightbulb_rounded,
-                      color: color, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
+            // ── Thumbnail ──────────────────────────────────────────────
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: coverUrl != null && coverUrl.isNotEmpty
+                  ? Image.network(
+                      coverUrl,
+                      width: 70,
+                      height: 98,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _placeholderCover(),
+                    )
+                  : _placeholderCover(),
+            ),
+            const SizedBox(width: 14),
+
+            // ── Info ───────────────────────────────────────────────────
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(patent['title'] ?? '',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                      if (appNum != null) ...[
-                        const SizedBox(height: 2),
-                        Text(appNum,
-                            style: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11)),
-                      ],
+                      Expanded(
+                        child: Text(patent['title'] ?? '',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      GestureDetector(
+                        onTap: onEdit,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Icon(Icons.edit_rounded,
+                              size: 18, color: Colors.blueAccent),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: onDelete,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 10),
+                          child: Icon(Icons.delete_rounded,
+                              size: 18, color: Colors.redAccent),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor(status).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(status ?? 'Draft',
-                      style: TextStyle(
-                          color: _statusColor(status),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ],
+                  if (inventors.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(inventors.join(', '),
+                        style: const TextStyle(
+                            color: color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ] else if (patent['assignee'] != null) ...[
+                    const SizedBox(height: 4),
+                    Text(patent['assignee'],
+                        style: const TextStyle(
+                            color: color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    if (status != null)
+                      _chip(Icons.info_rounded, status, _statusColor(status)),
+                    if (patent['category'] != null)
+                      _chip(Icons.category_rounded, patent['category'],
+                          Colors.purple),
+                    if (patent['filing_date'] != null)
+                      _chip(
+                          Icons.calendar_today_rounded,
+                          patent['filing_date'].toString().substring(0, 10),
+                          Colors.teal),
+                    if (appNum != null)
+                      _chip(Icons.tag_rounded, appNum, Colors.indigo),
+                    if (patent['file_url'] != null)
+                      _chip(Icons.picture_as_pdf_rounded, 'PDF', Colors.green),
+                  ]),
+                  if (patent['abstract'] != null) ...[
+                    const SizedBox(height: 8),
+                    Text(patent['abstract'],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: Colors.grey.shade500, fontSize: 12)),
+                  ],
+                ],
+              ),
             ),
-            if (patent['abstract'] != null) ...[
-              const SizedBox(height: 10),
-              Text(patent['abstract'],
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            ],
-            const SizedBox(height: 10),
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              if (inventors.isNotEmpty)
-                _Chip(
-                    icon: Icons.person_rounded,
-                    label: inventors.join(', '),
-                    color: color),
-              if (patent['category'] != null)
-                _Chip(
-                    icon: Icons.category_rounded,
-                    label: patent['category'],
-                    color: Colors.purple),
-              if (patent['filing_date'] != null)
-                _Chip(
-                    icon: Icons.calendar_today_rounded,
-                    label: patent['filing_date'].toString().substring(0, 10),
-                    color: Colors.teal),
-              if (patent['file_url'] != null)
-                _Chip(
-                    icon: Icons.picture_as_pdf_rounded,
-                    label: 'PDF',
-                    color: Colors.green),
-            ]),
           ],
         ),
       ),
     );
   }
-}
 
-class _Chip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  const _Chip({required this.icon, required this.label, required this.color});
+  Widget _placeholderCover() => Container(
+        width: 70,
+        height: 98,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4C1D95), Color(0xFF6C3CE1)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            (patent['title'] as String? ?? 'P').substring(0, 1).toUpperCase(),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+          ),
+        ),
+      );
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11, color: color, fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
+  Widget _chip(IconData icon, String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11, color: color, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      );
 }

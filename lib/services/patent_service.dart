@@ -71,8 +71,9 @@ class PatentService {
     );
     final res = await http.get(uri, headers: await _headers());
     final body = jsonDecode(res.body);
-    if (res.statusCode != 200)
+    if (res.statusCode != 200) {
       throw body['error'] ?? 'Failed to load inventors';
+    }
     return body['inventors'] as List;
   }
 
@@ -96,6 +97,15 @@ class PatentService {
     }
     return body['inventor'] as Map<String, dynamic>;
   }
+
+  static Future<void> deleteInventor(String id) async {
+    final res = await http.delete(Uri.parse('$_base/inventors/$id'),
+        headers: await _headers());
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw body['error'] ?? 'Failed to delete inventor';
+    }
+  }
 }
 
 class PatentPayload {
@@ -103,7 +113,10 @@ class PatentPayload {
   final String status;
   final String? filingDate;
   final String? publicationDate;
+  final String? grantDate;
+  final String? validityDate;
   final String? assignee;
+  final String? attorneys;
   final String? abstract;
   final String? technicalField;
   final String? background;
@@ -116,14 +129,21 @@ class PatentPayload {
   final String? fileBase64;
   final String? fileName;
   final String? mimeType;
+  final String? coverBase64;
+  final String? coverName;
+  final String? coverMime;
   final String? existingFileUrl;
+  final String? existingCoverUrl;
 
   const PatentPayload({
     required this.title,
     this.status = 'Draft',
     this.filingDate,
     this.publicationDate,
+    this.grantDate,
+    this.validityDate,
     this.assignee,
+    this.attorneys,
     this.abstract,
     this.technicalField,
     this.background,
@@ -136,7 +156,11 @@ class PatentPayload {
     this.fileBase64,
     this.fileName,
     this.mimeType,
+    this.coverBase64,
+    this.coverName,
+    this.coverMime,
     this.existingFileUrl,
+    this.existingCoverUrl,
   });
 
   Map<String, dynamic> toJson() => {
@@ -144,7 +168,10 @@ class PatentPayload {
         'status': status,
         if (filingDate != null) 'filing_date': filingDate,
         if (publicationDate != null) 'publication_date': publicationDate,
+        if (grantDate != null) 'grant_date': grantDate,
+        if (validityDate != null) 'validity_date': validityDate,
         if (assignee != null) 'assignee': assignee,
+        if (attorneys != null) 'attorneys': attorneys,
         if (abstract != null) 'abstract': abstract,
         if (technicalField != null) 'technical_field': technicalField,
         if (background != null) 'background': background,
@@ -158,6 +185,10 @@ class PatentPayload {
         if (fileBase64 != null) 'file_base64': fileBase64,
         if (fileName != null) 'file_name': fileName,
         if (mimeType != null) 'mime_type': mimeType,
+        if (coverBase64 != null) 'cover_base64': coverBase64,
+        if (coverName != null) 'cover_name': coverName,
+        if (coverMime != null) 'cover_mime': coverMime,
+        if (existingCoverUrl != null) 'cover_url': existingCoverUrl,
         if (existingFileUrl != null) 'file_url': existingFileUrl,
       };
 }

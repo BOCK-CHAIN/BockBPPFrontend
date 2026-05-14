@@ -72,8 +72,9 @@ class ScholarService {
     final uri = Uri.parse('$_base/scholar/author/${Uri.encodeComponent(name)}');
     final res = await http.get(uri, headers: await _headers());
     final body = jsonDecode(res.body);
-    if (res.statusCode != 200)
+    if (res.statusCode != 200) {
       throw body['error'] ?? 'Failed to load author papers';
+    }
     return body as Map<String, dynamic>;
   }
 }
@@ -94,15 +95,19 @@ class ScholarPayload {
   final String? issn;
   final String? isbn;
   final List<String> keywords;
-  final String? institution;
-  final String? department;
-  final String? advisor;
-  final String? degree;
+  final String? orgName;
+  final String? orgDepartment;
+  final String? orgLocation;
+  final String? orgWebsite;
   final List<String> citedPaperIds;
   final String? fileBase64;
   final String? fileName;
   final String? mimeType;
+  final String? coverBase64;
+  final String? coverName;
+  final String? coverMime;
   final String? existingFileUrl;
+  final String? existingCoverUrl;
 
   const ScholarPayload({
     required this.title,
@@ -119,15 +124,19 @@ class ScholarPayload {
     this.issn,
     this.isbn,
     this.keywords = const [],
-    this.institution,
-    this.department,
-    this.advisor,
-    this.degree,
+    this.orgName,
+    this.orgDepartment,
+    this.orgLocation,
+    this.orgWebsite,
     this.citedPaperIds = const [],
     this.fileBase64,
     this.fileName,
     this.mimeType,
+    this.coverBase64,
+    this.coverName,
+    this.coverMime,
     this.existingFileUrl,
+    this.existingCoverUrl,
   });
 
   Map<String, dynamic> toJson() => {
@@ -145,14 +154,18 @@ class ScholarPayload {
         if (issn != null) 'issn': issn,
         if (isbn != null) 'isbn': isbn,
         'keywords': keywords,
-        if (institution != null) 'institution': institution,
-        if (department != null) 'department': department,
-        if (advisor != null) 'advisor': advisor,
-        if (degree != null) 'degree': degree,
+        if (orgName != null) 'org_name': orgName,
+        if (orgDepartment != null) 'org_department': orgDepartment,
+        if (orgLocation != null) 'org_location': orgLocation,
+        if (orgWebsite != null) 'org_website': orgWebsite,
         'cited_paper_ids': citedPaperIds,
         if (fileBase64 != null) 'file_base64': fileBase64,
         if (fileName != null) 'file_name': fileName,
         if (mimeType != null) 'mime_type': mimeType,
+        if (coverBase64 != null) 'cover_base64': coverBase64,
+        if (coverName != null) 'cover_name': coverName,
+        if (coverMime != null) 'cover_mime': coverMime,
+        if (existingCoverUrl != null) 'cover_url': existingCoverUrl,
         if (existingFileUrl != null) 'file_url': existingFileUrl,
       };
 }

@@ -1,5 +1,7 @@
 // lib/screens/patent_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:bpp/core/json_utils.dart';
 import '../core/session.dart';
 import '../services/patent_service.dart';
 import 'patent_form_screen.dart';
@@ -13,6 +15,8 @@ class PatentDetailScreen extends StatefulWidget {
 }
 
 class _PatentDetailScreenState extends State<PatentDetailScreen> {
+  static const color = Color(0xFF6C3CE1);
+
   Map<String, dynamic>? _patent;
   bool _loading = true;
   String? _error;
@@ -75,6 +79,13 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     }
   }
 
+  Future<void> _openFile(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Color _statusColor(String? s) {
     switch (s) {
       case 'Approved':
@@ -90,7 +101,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF6F4FF);
     final cardBg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
@@ -119,9 +129,13 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: const BorderRadius.only(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFF4C1D95), Color(0xFF6C3CE1)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.only(
                               bottomLeft: Radius.circular(28),
                               bottomRight: Radius.circular(28),
                             ),
@@ -211,67 +225,70 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                             child: ListView(
                                 padding: const EdgeInsets.all(20),
                                 children: [
+                                  // ── Top chips ──────────────────────────
                                   Wrap(spacing: 8, runSpacing: 8, children: [
                                     if (_patent!['category'] != null)
                                       _chip(Icons.category_rounded,
-                                          _patent!['category'], Colors.purple),
+                                          _patent!['category']),
                                     if (_patent!['assignee'] != null)
                                       _chip(Icons.business_rounded,
-                                          _patent!['assignee'], Colors.teal),
+                                          _patent!['assignee']),
                                     if (_patent!['filing_date'] != null)
-                                      _chip(
-                                          Icons.calendar_today_rounded,
-                                          'Filed: ${_patent!['filing_date'].toString().substring(0, 10)}',
-                                          Colors.blueGrey),
+                                      _chip(Icons.calendar_today_rounded,
+                                          'Filed: ${_patent!['filing_date'].toString().substring(0, 10)}'),
                                     if (_patent!['publication_date'] != null)
-                                      _chip(
-                                          Icons.publish_rounded,
-                                          'Published: ${_patent!['publication_date'].toString().substring(0, 10)}',
-                                          Colors.indigo),
+                                      _chip(Icons.publish_rounded,
+                                          'Published: ${_patent!['publication_date'].toString().substring(0, 10)}'),
                                     if (_patent!['file_url'] != null)
                                       _chip(Icons.picture_as_pdf_rounded,
-                                          'PDF attached', Colors.green),
+                                          'PDF attached'),
                                   ]),
                                   const SizedBox(height: 20),
-                                  _buildInventors(cardBg, color),
-                                  const SizedBox(height: 12),
+
+                                  // ── Inventors ──────────────────────────
+                                  _buildInventors(cardBg),
+
+                                  // ── Content sections ───────────────────
                                   if (_patent!['abstract'] != null)
-                                    _section(cardBg, color, 'Abstract',
+                                    _textSection(
+                                        cardBg,
+                                        'Abstract',
+                                        Icons.short_text_rounded,
                                         _patent!['abstract']),
                                   if (_patent!['technical_field'] != null)
-                                    _section(cardBg, color, 'Technical Field',
+                                    _textSection(
+                                        cardBg,
+                                        'Technical Field',
+                                        Icons.precision_manufacturing_rounded,
                                         _patent!['technical_field']),
                                   if (_patent!['background'] != null)
-                                    _section(
+                                    _textSection(
                                         cardBg,
-                                        color,
                                         'Background / Prior Art',
+                                        Icons.history_edu_rounded,
                                         _patent!['background']),
                                   if (_patent!['claims'] != null)
-                                    _section(cardBg, color, 'Claims',
-                                        _patent!['claims'],
-                                        accent: Colors.deepOrange),
-                                  if (_patent!['detailed_description'] != null)
-                                    _section(
+                                    _textSection(
                                         cardBg,
-                                        color,
+                                        'Claims',
+                                        Icons.gavel_rounded,
+                                        _patent!['claims']),
+                                  if (_patent!['detailed_description'] != null)
+                                    _textSection(
+                                        cardBg,
                                         'Detailed Description',
+                                        Icons.article_rounded,
                                         _patent!['detailed_description']),
+
+                                  // ── Keywords ───────────────────────────
                                   if ((_patent!['keywords'] as List?)
                                           ?.isNotEmpty ==
                                       true) ...[
-                                    _sectionLabel('Keywords', color),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                          color: cardBg,
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          border: Border.all(
-                                              color: color.withValues(
-                                                  alpha: 0.15))),
-                                      child: Wrap(
+                                    _sectionCard(
+                                      cardBg,
+                                      'Keywords',
+                                      Icons.tag_rounded,
+                                      Wrap(
                                           spacing: 6,
                                           runSpacing: 6,
                                           children: (_patent!['keywords']
@@ -288,7 +305,7 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                                             BorderRadius
                                                                 .circular(20)),
                                                     child: Text(k.toString(),
-                                                        style: TextStyle(
+                                                        style: const TextStyle(
                                                             fontSize: 12,
                                                             color: color,
                                                             fontWeight:
@@ -299,7 +316,47 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                   ],
+
+                                  // ── Citations ──────────────────────────
                                   _buildCitations(cardBg),
+
+                                  // ── Document (Scholar style) ───────────
+                                  if (_patent!['file_url'] != null) ...[
+                                    _sectionCard(
+                                      cardBg,
+                                      'Document',
+                                      Icons.picture_as_pdf_rounded,
+                                      GestureDetector(
+                                        onTap: () =>
+                                            _openFile(_patent!['file_url']),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: color.withValues(alpha: 0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            border: Border.all(
+                                                color: color.withValues(
+                                                    alpha: 0.3)),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.download_rounded,
+                                                  color: color, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Download PDF',
+                                                  style: TextStyle(
+                                                      color: color,
+                                                      fontWeight:
+                                                          FontWeight.w600)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 40),
                                 ]),
                           ),
@@ -309,23 +366,19 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     );
   }
 
-  Widget _buildInventors(Color cardBg, Color color) {
-    final inventors = (_patent!['patent_inventors'] as List? ?? [])
+  // ── Inventors ───────────────────────────────────────────────────────────────
+  Widget _buildInventors(Color cardBg) {
+    final inventors = parseJsonList(_patent!['patent_inventors'])
         .map((pi) => pi['inventors'] as Map<String, dynamic>?)
         .whereType<Map<String, dynamic>>()
         .toList();
     if (inventors.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _sectionLabel('Inventors', color),
-      const SizedBox(height: 8),
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.15)),
-        ),
-        child: Column(
+      _sectionCard(
+        cardBg,
+        'Inventors',
+        Icons.people_rounded,
+        Column(
             children: inventors
                 .map((inv) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -335,7 +388,7 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                           decoration: BoxDecoration(
                               color: color.withValues(alpha: 0.1),
                               shape: BoxShape.circle),
-                          child: Icon(Icons.person_rounded,
+                          child: const Icon(Icons.person_rounded,
                               color: color, size: 14),
                         ),
                         const SizedBox(width: 10),
@@ -350,56 +403,43 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     ]);
   }
 
+  // ── Citations ───────────────────────────────────────────────────────────────
   Widget _buildCitations(Color cardBg) {
-    final cited = (_patent!['citations_from'] as List? ?? [])
+    final cited = parseJsonList(_patent!['citations_from'])
         .map((c) => c['cited_patent'] as Map<String, dynamic>?)
         .whereType<Map<String, dynamic>>()
         .toList();
-    final citedBy = (_patent!['citations_to'] as List? ?? [])
+    final citedBy = parseJsonList(_patent!['citations_to'])
         .map((c) => c['patent'] as Map<String, dynamic>?)
         .whereType<Map<String, dynamic>>()
         .toList();
     if (cited.isEmpty && citedBy.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (cited.isNotEmpty) ...[
-        _sectionLabel('Cites', Colors.blueAccent),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: Colors.blueAccent.withValues(alpha: 0.2))),
-          child: Column(
-              children: cited
-                  .map((p) => _citationRow(p, Colors.blueAccent))
-                  .toList()),
+        _sectionCard(
+          cardBg,
+          'Cites (${cited.length})',
+          Icons.format_list_numbered_rounded,
+          Column(children: cited.map((p) => _citationRow(p)).toList()),
         ),
         const SizedBox(height: 12),
       ],
       if (citedBy.isNotEmpty) ...[
-        _sectionLabel('Cited By', Colors.purple),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.purple.withValues(alpha: 0.2))),
-          child: Column(
-              children:
-                  citedBy.map((p) => _citationRow(p, Colors.purple)).toList()),
+        _sectionCard(
+          cardBg,
+          'Cited By (${citedBy.length})',
+          Icons.call_received_rounded,
+          Column(children: citedBy.map((p) => _citationRow(p)).toList()),
         ),
         const SizedBox(height: 12),
       ],
     ]);
   }
 
-  Widget _citationRow(Map<String, dynamic> p, Color accent) => Padding(
+  Widget _citationRow(Map<String, dynamic> p) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
-          Icon(Icons.lightbulb_outline_rounded, color: accent, size: 14),
+          const Icon(Icons.lightbulb_outline_rounded, color: color, size: 14),
           const SizedBox(width: 8),
           Expanded(
               child: Text(p['title'] ?? '',
@@ -409,44 +449,63 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
         ]),
       );
 
-  Widget _section(Color cardBg, Color color, String label, String? content,
-      {Color? accent}) {
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  /// Text content section — wraps plain text in a _sectionCard
+  Widget _textSection(
+      Color cardBg, String label, IconData icon, String? content) {
     if (content == null || content.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _sectionLabel(label, color),
-      const SizedBox(height: 8),
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: (accent ?? color).withValues(alpha: 0.15)),
-        ),
-        child: Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
+      _sectionCard(
+        cardBg,
+        label,
+        icon,
+        Text(content,
+            style: TextStyle(
+                fontSize: 14, height: 1.5, color: Colors.grey.shade400)),
       ),
       const SizedBox(height: 12),
     ]);
   }
 
-  Widget _sectionLabel(String label, Color color) => Text(label,
-      style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: color,
-          letterSpacing: 0.5));
+  /// Scholar-style section card with icon + title header
+  Widget _sectionCard(Color cardBg, String title, IconData icon, Widget child) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, color: color, size: 15),
+            const SizedBox(width: 6),
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+          ]),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
 
-  Widget _chip(IconData icon, String label, Color c) => Container(
+  Widget _chip(IconData icon, String label) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-            color: c.withValues(alpha: 0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 12, color: c),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 5),
           Text(label,
-              style: TextStyle(
-                  fontSize: 11, color: c, fontWeight: FontWeight.w600)),
+              style: const TextStyle(
+                  fontSize: 11, color: color, fontWeight: FontWeight.w600)),
         ]),
       );
 }

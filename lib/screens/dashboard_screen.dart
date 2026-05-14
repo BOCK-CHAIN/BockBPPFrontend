@@ -1,11 +1,15 @@
 // lib/screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
+import 'package:bpp/core/json_utils.dart';
 import '../core/session.dart';
+import '../services/book_service.dart';
 import '../services/patent_service.dart';
 import '../services/scholar_service.dart';
 import 'patents_screen.dart';
 import 'scholar_screen.dart';
 import 'library_screen.dart';
+import 'my_contributions_screen.dart';
+import 'search_results_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // THEME
@@ -30,30 +34,19 @@ class _AppTheme {
 // ═══════════════════════════════════════════════════════════════════════════
 // VIEW MODELS
 // ═══════════════════════════════════════════════════════════════════════════
-class _BookData {
-  final String title, author, year, initial;
-  final Color topColor, bottomColor;
-  const _BookData({
-    required this.title,
-    required this.author,
-    required this.year,
-    required this.topColor,
-    required this.bottomColor,
-    required this.initial,
-  });
-}
-
 class _PaperData {
   final String title, author, year, tag;
+  final String? imageUrl;
   const _PaperData(
       {required this.title,
       required this.author,
       required this.year,
-      required this.tag});
+      required this.tag,
+      this.imageUrl});
 }
 
 _PaperData _patentFromJson(Map<String, dynamic> j) {
-  final inventors = (j['patent_inventors'] as List?) ?? [];
+  final inventors = parseJsonList(j['patent_inventors']);
   String author = 'Unknown';
   if (inventors.isNotEmpty) {
     final first = inventors[0]['inventors']?['name'] ?? '';
@@ -71,11 +64,12 @@ _PaperData _patentFromJson(Map<String, dynamic> j) {
     author: author,
     year: year,
     tag: j['category'] as String? ?? 'Patent',
+    imageUrl: j['cover_url'] as String?,
   );
 }
 
 _PaperData _scholarFromJson(Map<String, dynamic> j) {
-  final authors = (j['authors'] as List?) ?? [];
+  final authors = parseStringList(j['authors']);
   final author = authors.isEmpty
       ? 'Unknown'
       : authors.length > 1
@@ -86,6 +80,17 @@ _PaperData _scholarFromJson(Map<String, dynamic> j) {
     author: author,
     year: j['year']?.toString() ?? '—',
     tag: j['venue_type'] as String? ?? 'Paper',
+    imageUrl: j['cover_url'] as String?,
+  );
+}
+
+_PaperData _bookFromJson(Map<String, dynamic> j) {
+  return _PaperData(
+    title: j['title'] as String? ?? 'Untitled',
+    author: j['author'] as String? ?? 'Unknown',
+    year: j['year']?.toString() ?? '—',
+    tag: j['genre'] as String? ?? 'Book',
+    imageUrl: j['cover_url'] as String?,
   );
 }
 
@@ -108,62 +113,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showFilters = false;
   String? _filterType;
   String? _filterYear;
+  String? _sortOrder; // 'az' or 'za'
   String? _userName;
   bool _darkMode = true;
 
   _AppTheme get _theme => _AppTheme(dark: _darkMode);
 
+  List<_PaperData> _books = [];
   List<_PaperData> _patents = [];
   List<_PaperData> _papers = [];
+  bool _booksLoading = true;
   bool _patentsLoading = true;
   bool _papersLoading = true;
+  String? _booksError;
   String? _patentsError;
   String? _papersError;
-
-  static const _placeholderBooks = [
-    _BookData(
-        title: 'Dune',
-        author: 'Frank Herbert',
-        year: '1965',
-        topColor: Color(0xFFC8860A),
-        bottomColor: Color(0xFF3D1F00),
-        initial: 'D'),
-    _BookData(
-        title: 'Sapiens',
-        author: 'Y. N. Harari',
-        year: '2011',
-        topColor: Color(0xFF1A3A6B),
-        bottomColor: Color(0xFF0A1F3D),
-        initial: 'S'),
-    _BookData(
-        title: 'Atomic Habits',
-        author: 'James Clear',
-        year: '2018',
-        topColor: Color(0xFF1C5C2E),
-        bottomColor: Color(0xFF0A2A14),
-        initial: 'A'),
-    _BookData(
-        title: 'Deep Work',
-        author: 'Cal Newport',
-        year: '2016',
-        topColor: Color(0xFF4A1D96),
-        bottomColor: Color(0xFF1E0A3C),
-        initial: 'D'),
-    _BookData(
-        title: 'Thinking F&S',
-        author: 'D. Kahneman',
-        year: '2011',
-        topColor: Color(0xFF7A1C1C),
-        bottomColor: Color(0xFF2D0A0A),
-        initial: 'T'),
-    _BookData(
-        title: 'The Lean Startup',
-        author: 'Eric Ries',
-        year: '2011',
-        topColor: Color(0xFF1A5A6B),
-        bottomColor: Color(0xFF0A2530),
-        initial: 'L'),
-  ];
 
   static const _tabs = ['Library', 'Scholar', 'Patents'];
   static const _years = ['2024', '2023', '2022', '2021', '2020', '2019'];
@@ -196,6 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         2 => _patCats,
         _ => _libGenres,
       };
+
   String get _filterLabel => switch (_activeTab) {
         1 => 'Type',
         2 => 'Category',
@@ -206,6 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadUser();
+    _fetchBooks();
     _fetchPatents();
     _fetchPapers();
   }
@@ -231,18 +197,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     try {
       final raw = await PatentService.getPatents();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _patents =
               raw.cast<Map<String, dynamic>>().map(_patentFromJson).toList();
           _patentsLoading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _patentsError = e.toString();
           _patentsLoading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _fetchBooks() async {
+    setState(() {
+      _booksLoading = true;
+      _booksError = null;
+    });
+    try {
+      final raw = await BookService.getBooks();
+      if (mounted) {
+        setState(() {
+          _books = raw.cast<Map<String, dynamic>>().map(_bookFromJson).toList();
+          _booksLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _booksError = e.toString();
+          _booksLoading = false;
+        });
+      }
     }
   }
 
@@ -253,19 +244,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     try {
       final raw = await ScholarService.getPapers();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _papers =
               raw.cast<Map<String, dynamic>>().map(_scholarFromJson).toList();
           _papersLoading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _papersError = e.toString();
           _papersLoading = false;
         });
+      }
     }
+  }
+
+  void _search() {
+    final q = _searchCtrl.text.trim();
+    if (q.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SearchResultsScreen(
+          query: q,
+          filterType: _filterType,
+          filterYear: _filterYear,
+          sortOrder: _sortOrder,
+        ),
+      ),
+    );
   }
 
   void _goTo(int index, {String query = ''}) {
@@ -276,7 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           initialVenueType: _filterType,
           initialYear: _filterYear != null ? int.tryParse(_filterYear!) : null),
       2 => PatentsScreen(initialSearch: q, initialCategory: _filterType),
-      _ => const LibraryScreen(),
+      _ => LibraryScreen(initialSearch: q, initialGenre: _filterType),
     };
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
@@ -286,6 +295,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) Navigator.pushReplacementNamed(context, '/login');
   }
 
+  void _showMenu(BuildContext btnContext) {
+    final t = _theme;
+    final RenderBox button = btnContext.findRenderObject() as RenderBox;
+    final RenderBox overlay = Navigator.of(btnContext)
+        .overlay!
+        .context
+        .findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: btnContext,
+      position: position,
+      color: t.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: t.border),
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'contributions',
+          child: Row(children: [
+            Icon(Icons.dashboard_customize_rounded,
+                color: t.purpleHi, size: 18),
+            const SizedBox(width: 10),
+            Text('My Contributions',
+                style: TextStyle(color: t.textPri, fontSize: 14)),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'logout',
+          child: Row(children: [
+            const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18),
+            const SizedBox(width: 10),
+            const Text('Logout',
+                style: TextStyle(color: Colors.redAccent, fontSize: 14)),
+          ]),
+        ),
+      ],
+    ).then((result) {
+      if (!mounted) return;
+      if (result == 'logout') {
+        _logout();
+      } else if (result == 'contributions') {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const MyContributionsScreen()));
+      }
+    });
+  }
+
   void _scrollBy(ScrollController ctrl, double delta) {
     final target =
         (ctrl.offset + delta).clamp(0.0, ctrl.position.maxScrollExtent);
@@ -293,17 +358,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final t = _theme;
     final screenW = MediaQuery.of(context).size.width;
     final isWide = screenW > 600;
-
-    final bookCardW = isWide ? (screenW / 5).clamp(180.0, 260.0) : 148.0;
-    final bookRowH = isWide ? bookCardW * 1.45 : 220.0;
     final paperCardW = isWide ? (screenW / 6).clamp(150.0, 220.0) : 180.0;
-    final paperRowH = isWide ? paperCardW * 0.95 : 165.0;
+    final paperRowH = isWide ? paperCardW * 1.3 : 230.0;
     final scrollStep = isWide ? screenW * 0.55 : 220.0;
 
     return AnimatedContainer(
@@ -323,28 +385,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _buildHero(t: t, isWide: isWide),
                       SizedBox(height: isWide ? 48 : 32),
 
-                      // Library (placeholder)
+                      // ── Library row ──
                       _RowHeader(
                           t: t,
                           icon: Icons.menu_book_rounded,
-                          label: 'Most Popular',
+                          label: 'Recently Added',
                           sub: 'Library',
                           ctrl: _bookScroll,
                           isWide: isWide,
                           onScroll: (d) =>
                               _scrollBy(_bookScroll, d * (scrollStep / 220))),
                       const SizedBox(height: 14),
-                      _BookCoverRow(
-                          t: t,
-                          books: _placeholderBooks,
-                          ctrl: _bookScroll,
-                          cardWidth: bookCardW,
-                          rowHeight: bookRowH,
-                          onTap: (title) => _goTo(0, query: title)),
+                      if (_booksLoading)
+                        _LoadingRow(t: t, rowHeight: paperRowH)
+                      else if (_booksError != null)
+                        _ErrorRow(
+                            t: t,
+                            message: _booksError!,
+                            onRetry: _fetchBooks,
+                            rowHeight: paperRowH)
+                      else if (_books.isEmpty)
+                        _EmptyRow(
+                            t: t,
+                            label: 'No existing books',
+                            rowHeight: paperRowH)
+                      else
+                        _PaperCardRow(
+                            t: t,
+                            items: _books,
+                            ctrl: _bookScroll,
+                            accentColor: const Color(0xFF6C3CE1),
+                            fallbackIcon: Icons.menu_book_rounded,
+                            cardWidth: paperCardW,
+                            rowHeight: paperRowH,
+                            onTap: (title) => _goTo(0, query: title)),
 
                       SizedBox(height: isWide ? 48 : 32),
 
-                      // Patents (live)
+                      // ── Patents row ──
                       _RowHeader(
                           t: t,
                           icon: Icons.lightbulb_rounded,
@@ -365,20 +443,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             rowHeight: paperRowH)
                       else if (_patents.isEmpty)
                         _EmptyRow(
-                            t: t, label: 'No patents yet', rowHeight: paperRowH)
+                            t: t,
+                            label: 'No existing patents',
+                            rowHeight: paperRowH)
                       else
                         _PaperCardRow(
                             t: t,
                             items: _patents,
                             ctrl: _patentScroll,
                             accentColor: const Color(0xFF8B60E8),
+                            fallbackIcon: Icons.lightbulb_rounded,
                             cardWidth: paperCardW,
                             rowHeight: paperRowH,
                             onTap: (title) => _goTo(2, query: title)),
 
                       SizedBox(height: isWide ? 48 : 32),
 
-                      // Scholar (live)
+                      // ── Scholar row ──
                       _RowHeader(
                           t: t,
                           icon: Icons.science_rounded,
@@ -399,13 +480,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             rowHeight: paperRowH)
                       else if (_papers.isEmpty)
                         _EmptyRow(
-                            t: t, label: 'No papers yet', rowHeight: paperRowH)
+                            t: t,
+                            label: 'No existing scholar',
+                            rowHeight: paperRowH)
                       else
                         _PaperCardRow(
                             t: t,
                             items: _papers,
                             ctrl: _scholarScroll,
                             accentColor: t.purpleHi,
+                            fallbackIcon: Icons.science_rounded,
                             cardWidth: paperCardW,
                             rowHeight: paperRowH,
                             onTap: (title) => _goTo(1, query: title)),
@@ -454,7 +538,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () => setState(() => _darkMode = !_darkMode),
           ),
           const SizedBox(width: 8),
-          _IconBtn(t: t, icon: Icons.logout_rounded, onTap: _logout),
+          Builder(
+            builder: (ctx) => GestureDetector(
+              onTap: () => _showMenu(ctx),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: t.purple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: t.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 11,
+                      backgroundColor: t.purple.withValues(alpha: 0.3),
+                      child: Text(
+                        (_userName ?? 'G').substring(0, 1).toUpperCase(),
+                        style: TextStyle(
+                            color: t.purpleHi,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(_userName ?? '...',
+                        style: TextStyle(
+                            color: t.textPri,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 5),
+                    Icon(Icons.keyboard_arrow_down_rounded,
+                        color: t.textMut, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -485,7 +608,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               constraints: const BoxConstraints(maxWidth: 680),
               child: Column(
                 children: [
-                  // Tabs
+                  // Tab row
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     decoration: BoxDecoration(
@@ -541,7 +664,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       }),
                     ),
                   ),
-
                   // Search bar
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
@@ -560,7 +682,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Expanded(
                           child: TextField(
                             controller: _searchCtrl,
-                            onSubmitted: (_) => _goTo(_activeTab),
+                            onSubmitted: (_) => _search(),
                             style: TextStyle(color: t.textPri, fontSize: 15),
                             cursorColor: t.purpleHi,
                             decoration: InputDecoration(
@@ -588,7 +710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: () => _goTo(_activeTab),
+                          onTap: _search,
                           child: Container(
                             margin: const EdgeInsets.all(6),
                             padding: const EdgeInsets.symmetric(
@@ -606,8 +728,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
-
-                  // Filters
+                  // Filters panel
                   if (_showFilters) ...[
                     const SizedBox(height: 10),
                     AnimatedContainer(
@@ -621,6 +742,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _FilterLabel(text: 'Sort', t: t),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            _SortChip(
+                              t: t,
+                              label: 'A → Z',
+                              selected: _sortOrder == 'az',
+                              onTap: () => setState(() => _sortOrder =
+                                  _sortOrder == 'az' ? null : 'az'),
+                            ),
+                            const SizedBox(width: 8),
+                            _SortChip(
+                              t: t,
+                              label: 'Z → A',
+                              selected: _sortOrder == 'za',
+                              onTap: () => setState(() => _sortOrder =
+                                  _sortOrder == 'za' ? null : 'za'),
+                            ),
+                          ]),
+                          const SizedBox(height: 12),
                           _FilterLabel(text: _filterLabel, t: t),
                           const SizedBox(height: 8),
                           _ChipRow(
@@ -754,8 +895,14 @@ class _EmptyRow extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         height: rowHeight,
         child: Center(
-            child:
-                Text(label, style: TextStyle(color: t.textMut, fontSize: 13))),
+            child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inbox_rounded, color: t.textMut, size: 32),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(color: t.textMut, fontSize: 13)),
+          ],
+        )),
       );
 }
 
@@ -833,125 +980,14 @@ class _ArrowBtn extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BOOK ROW
-// ═══════════════════════════════════════════════════════════════════════════
-class _BookCoverRow extends StatelessWidget {
-  final _AppTheme t;
-  final List<_BookData> books;
-  final ScrollController ctrl;
-  final ValueChanged<String> onTap;
-  final double cardWidth, rowHeight;
-  const _BookCoverRow(
-      {required this.t,
-      required this.books,
-      required this.ctrl,
-      required this.onTap,
-      required this.cardWidth,
-      required this.rowHeight});
-
-  @override
-  Widget build(BuildContext context) {
-    final hPad = MediaQuery.of(context).size.width > 600 ? 40.0 : 20.0;
-    return SizedBox(
-      height: rowHeight,
-      child: ListView.builder(
-        controller: ctrl,
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: hPad),
-        itemCount: books.length,
-        itemBuilder: (_, i) {
-          final b = books[i];
-          return GestureDetector(
-            onTap: () => onTap(b.title),
-            child: Container(
-              width: cardWidth,
-              margin: const EdgeInsets.only(right: 14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: t.border),
-              ),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(11),
-                          topRight: Radius.circular(11)),
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [b.topColor, b.bottomColor],
-                          ),
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(b.initial,
-                                style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    fontSize: 64,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1)),
-                            const Spacer(),
-                            Text(b.title,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.3)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: t.surface,
-                      borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(11),
-                          bottomRight: Radius.circular(11)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(b.author,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: t.textSec, fontSize: 10)),
-                        const SizedBox(height: 1),
-                        Text(b.year,
-                            style: TextStyle(color: t.textMut, fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PAPER ROW
+// PAPER ROW  — now accepts fallbackIcon per section
 // ═══════════════════════════════════════════════════════════════════════════
 class _PaperCardRow extends StatelessWidget {
   final _AppTheme t;
   final List<_PaperData> items;
   final ScrollController ctrl;
   final Color accentColor;
+  final IconData fallbackIcon;
   final ValueChanged<String> onTap;
   final double cardWidth, rowHeight;
   const _PaperCardRow(
@@ -959,6 +995,7 @@ class _PaperCardRow extends StatelessWidget {
       required this.items,
       required this.ctrl,
       required this.accentColor,
+      required this.fallbackIcon,
       required this.onTap,
       required this.cardWidth,
       required this.rowHeight});
@@ -975,6 +1012,7 @@ class _PaperCardRow extends StatelessWidget {
         itemCount: items.length,
         itemBuilder: (_, i) {
           final p = items[i];
+          final hasImage = p.imageUrl != null && p.imageUrl!.isNotEmpty;
           return GestureDetector(
             onTap: () => onTap(p.title),
             child: AnimatedContainer(
@@ -990,6 +1028,7 @@ class _PaperCardRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Tag badge — always shown
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1006,27 +1045,45 @@ class _PaperCardRow extends StatelessWidget {
                             fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: 10),
-                  Text(p.title,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: t.textPri,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35)),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Text(p.author,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style:
-                                  TextStyle(color: t.textSec, fontSize: 10))),
-                      Text(p.year,
-                          style: TextStyle(color: t.textMut, fontSize: 10)),
-                    ],
-                  ),
+                  // Cover image or text fallback
+                  if (hasImage)
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          p.imageUrl!,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _Nocover(
+                              t: t,
+                              icon: fallbackIcon,
+                              accentColor: accentColor),
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Text(p.title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: t.textPri,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35)),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                            child: Text(p.author,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    TextStyle(color: t.textSec, fontSize: 10))),
+                        Text(p.year,
+                            style: TextStyle(color: t.textMut, fontSize: 10)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1035,6 +1092,25 @@ class _PaperCardRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shown when image URL exists but fails to load, or as a placeholder
+class _Nocover extends StatelessWidget {
+  final _AppTheme t;
+  final IconData icon;
+  final Color accentColor;
+  const _Nocover(
+      {required this.t, required this.icon, required this.accentColor});
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: accentColor.withValues(alpha: 0.07),
+          border: Border.all(color: t.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, color: t.textMut, size: 28),
+      );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1074,6 +1150,36 @@ class _FilterLabel extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2),
+      );
+}
+
+class _SortChip extends StatelessWidget {
+  final _AppTheme t;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _SortChip(
+      {required this.t,
+      required this.label,
+      required this.selected,
+      required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? t.purple : t.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: selected ? t.purple : t.border),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  color: selected ? Colors.white : t.textSec,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+        ),
       );
 }
 

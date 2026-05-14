@@ -1,4 +1,6 @@
+// lib/screens/scholar_screen.dart
 import 'package:flutter/material.dart';
+import 'package:bpp/core/json_utils.dart';
 import '../services/scholar_service.dart';
 import 'scholar_detail_screen.dart';
 import 'scholar_form_screen.dart';
@@ -99,7 +101,7 @@ class _ScholarScreenState extends State<ScholarScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0FAFF);
+    final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF6F4FF);
 
     return Scaffold(
       backgroundColor: bg,
@@ -111,7 +113,7 @@ class _ScholarScreenState extends State<ScholarScreen> {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF4C1D95), Color(0xFF7C3AED)],
+                  colors: [Color(0xFF4C1D95), Color(0xFF6C3CE1)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -342,114 +344,155 @@ class _PaperCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
-    final authors = (paper['authors'] as List? ?? []).cast<String>();
+    final authors = parseStringList(paper['authors']);
     final venueType = paper['venue_type'] as String?;
-    final refCount = (paper['references_made'] as List? ?? []).length;
+    final coverUrl = paper['cover_url'] as String?;
+    final refCount = parseJsonList(paper['references_made']).length;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withValues(alpha: 0.15)),
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Icon(_venueIcon(venueType), color: color, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
+            // ── Thumbnail ──────────────────────────────────────────────
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: coverUrl != null && coverUrl.isNotEmpty
+                  ? Image.network(
+                      coverUrl,
+                      width: 70,
+                      height: 98,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _placeholderCover(),
+                    )
+                  : _placeholderCover(),
+            ),
+            const SizedBox(width: 14),
+
+            // ── Info ───────────────────────────────────────────────────
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(paper['title'] ?? '',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                      if (paper['year'] != null) ...[
-                        const SizedBox(height: 2),
-                        Text(paper['year'].toString(),
-                            style: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11)),
-                      ],
+                      Expanded(
+                        child: Text(paper['title'] ?? '',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      GestureDetector(
+                        onTap: onEdit,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Icon(Icons.edit_rounded,
+                              size: 18, color: Colors.blueAccent),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: onDelete,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 10),
+                          child: Icon(Icons.delete_rounded,
+                              size: 18, color: Colors.redAccent),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                if (venueType != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(venueType,
+                  if (authors.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(authors.join(', '),
                         style: const TextStyle(
                             color: color,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                  ),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    if (venueType != null)
+                      _chip(Icons.info_rounded, venueType, color),
+                    if (paper['year'] != null)
+                      _chip(Icons.calendar_today_rounded,
+                          paper['year'].toString(), Colors.teal),
+                    if (paper['venue'] != null)
+                      _chip(Icons.location_on_rounded, paper['venue'],
+                          Colors.indigo),
+                    if (refCount > 0)
+                      _chip(
+                          Icons.link_rounded,
+                          '$refCount ref${refCount == 1 ? '' : 's'}',
+                          Colors.blueAccent),
+                    if (paper['file_url'] != null)
+                      _chip(Icons.picture_as_pdf_rounded, 'PDF', Colors.green),
+                  ]),
+                  if (paper['abstract'] != null) ...[
+                    const SizedBox(height: 8),
+                    Text(paper['abstract'],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: Colors.grey.shade500, fontSize: 12)),
+                  ],
                 ],
-              ],
+              ),
             ),
-            if (authors.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(authors.join(', '),
-                  style: const TextStyle(
-                      color: color, fontSize: 12, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-            if (paper['abstract'] != null) ...[
-              const SizedBox(height: 6),
-              Text(paper['abstract'],
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: Colors.grey.shade500, fontSize: 12, height: 1.4)),
-            ],
-            const SizedBox(height: 10),
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              if (paper['venue'] != null)
-                _Chip(
-                    icon: Icons.location_on_rounded,
-                    label: paper['venue'],
-                    color: color),
-              if (paper['doi'] != null)
-                _Chip(
-                    icon: Icons.tag_rounded,
-                    label: 'DOI',
-                    color: Colors.indigo),
-              if (refCount > 0)
-                _Chip(
-                    icon: Icons.link_rounded,
-                    label: '$refCount ref${refCount == 1 ? '' : 's'}',
-                    color: Colors.blueAccent),
-              if (paper['file_url'] != null)
-                _Chip(
-                    icon: Icons.picture_as_pdf_rounded,
-                    label: 'PDF',
-                    color: Colors.green),
-            ]),
           ],
         ),
       ),
     );
   }
+
+  Widget _placeholderCover() => Container(
+        width: 70,
+        height: 98,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4C1D95), Color(0xFF6C3CE1)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            (paper['title'] as String? ?? 'P').substring(0, 1).toUpperCase(),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+          ),
+        ),
+      );
+
+  Widget _chip(IconData icon, String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11, color: color, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      );
 }
 
 class _Chip extends StatelessWidget {

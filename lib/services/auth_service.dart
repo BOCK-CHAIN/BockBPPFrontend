@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
+import '../core/session.dart';
 
 class AuthService {
-  // Generate hex ID from all registration fields (your exact spec)
   static String generateHexId({
     required String email,
     required String password,
@@ -20,7 +20,6 @@ class AuthService {
     return digest.toString().substring(0, 16);
   }
 
-  // Register — returns hex_id on success so UI can show it
   static Future<Map<String, dynamic>> register({
     required String email,
     required String password,
@@ -55,7 +54,6 @@ class AuthService {
     final body = jsonDecode(response.body);
 
     if (response.statusCode == 201) {
-      // Return hex_id so the UI can show it in the popup
       return {'success': true, 'data': body, 'hex_id': hexId};
     } else {
       return {
@@ -65,7 +63,6 @@ class AuthService {
     }
   }
 
-  // Login — uses hex ID + password
   static Future<Map<String, dynamic>> login({
     required String hexId,
     required String password,
@@ -85,11 +82,40 @@ class AuthService {
     }
   }
 
-  // Logout
   static Future<void> logout(String sessionId) async {
     await http.post(
       Uri.parse(ApiConstants.logout),
       headers: {'x-session-id': sessionId},
     );
+  }
+
+  // Delete account — calls DELETE /auth/account then clears local session
+  static Future<Map<String, dynamic>> deleteAccount() async {
+    final sid = await Session.getSessionId();
+    if (sid == null) return {'success': false, 'error': 'Not logged in'};
+
+    try {
+      final response = await http.delete(
+        Uri.parse('${ApiConstants.baseUrl}/auth/account'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sid,
+        },
+      );
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        await Session.clear();
+        return {'success': true};
+      } else {
+        return {
+          'success': false,
+          'error': body['error'] ?? 'Failed to delete account',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: $e'};
+    }
   }
 }

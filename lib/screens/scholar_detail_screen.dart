@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:bpp/core/json_utils.dart';
 import '../core/session.dart';
 import '../services/scholar_service.dart';
 import 'scholar_author_screen.dart';
@@ -16,7 +17,7 @@ class ScholarDetailScreen extends StatefulWidget {
 }
 
 class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
-  static const color = Color(0xFF00BCD4);
+  static const color = Color(0xFF6C3CE1);
 
   Map<String, dynamic>? _paper;
   bool _loading = true;
@@ -97,7 +98,7 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0FAFF);
+    final bg = isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF6F4FF);
     final cardBg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
 
     return Scaffold(
@@ -109,7 +110,11 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
               decoration: const BoxDecoration(
-                color: color,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF4C1D95), Color(0xFF6C3CE1)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(28),
                   bottomRight: Radius.circular(28),
@@ -187,8 +192,7 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                   const SizedBox(height: 12),
                                   _AuthorsRow(
                                       authors:
-                                          (_paper!['authors'] as List? ?? [])
-                                              .cast<String>()),
+                                          parseStringList(_paper!['authors'])),
                                   const SizedBox(height: 16),
                                   _BibMeta(paper: _paper!, cardBg: cardBg),
                                   const SizedBox(height: 16),
@@ -204,7 +208,7 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                     ),
                                     const SizedBox(height: 16),
                                   ],
-                                  if ((_paper!['keywords'] as List? ?? [])
+                                  if (parseJsonList(_paper!['keywords'])
                                       .isNotEmpty) ...[
                                     _Section(
                                       cardBg: cardBg,
@@ -213,7 +217,8 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                       child: Wrap(
                                         spacing: 6,
                                         runSpacing: 6,
-                                        children: (_paper!['keywords'] as List)
+                                        children: parseJsonList(
+                                                _paper!['keywords'])
                                             .map((k) => Container(
                                                   padding: const EdgeInsets
                                                       .symmetric(
@@ -238,36 +243,37 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                     ),
                                     const SizedBox(height: 16),
                                   ],
-                                  if (_paper!['advisor'] != null ||
-                                      _paper!['degree'] != null ||
-                                      _paper!['department'] != null ||
-                                      _paper!['institution'] != null) ...[
+                                  // ── Organisation section ───────────────
+                                  if (_paper!['org_name'] != null ||
+                                      _paper!['org_department'] != null ||
+                                      _paper!['org_location'] != null ||
+                                      _paper!['org_website'] != null) ...[
                                     _Section(
                                       cardBg: cardBg,
-                                      title: 'Institution Details',
-                                      icon: Icons.school_rounded,
+                                      title: 'Organisation Details',
+                                      icon: Icons.business_rounded,
                                       child: Column(
                                         children: [
-                                          if (_paper!['institution'] != null)
+                                          if (_paper!['org_name'] != null)
                                             _MetaRow(
                                                 Icons.apartment_rounded,
-                                                'Institution',
-                                                _paper!['institution']),
-                                          if (_paper!['department'] != null)
+                                                'Organisation',
+                                                _paper!['org_name']),
+                                          if (_paper!['org_department'] != null)
                                             _MetaRow(
                                                 Icons.domain_rounded,
                                                 'Department',
-                                                _paper!['department']),
-                                          if (_paper!['degree'] != null)
+                                                _paper!['org_department']),
+                                          if (_paper!['org_location'] != null)
                                             _MetaRow(
-                                                Icons.workspace_premium_rounded,
-                                                'Degree',
-                                                _paper!['degree']),
-                                          if (_paper!['advisor'] != null)
+                                                Icons.location_on_rounded,
+                                                'Location',
+                                                _paper!['org_location']),
+                                          if (_paper!['org_website'] != null)
                                             _MetaRow(
-                                                Icons.person_rounded,
-                                                'Advisor/Supervisor',
-                                                _paper!['advisor']),
+                                                Icons.language_rounded,
+                                                'Website',
+                                                _paper!['org_website']),
                                         ],
                                       ),
                                     ),
@@ -315,6 +321,7 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                     refs: _paper!['cited_by'] as List? ?? [],
                                     keyName: 'citing_paper',
                                   ),
+                                  // ── Document at bottom ─────────────────
                                   if (_paper!['file_url'] != null) ...[
                                     const SizedBox(height: 16),
                                     _Section(
@@ -366,6 +373,7 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
 
 // ── Authors row ───────────────────────────────────────────────────────────────
 class _AuthorsRow extends StatelessWidget {
+  static const color = Color(0xFF6C3CE1);
   final List<String> authors;
   const _AuthorsRow({required this.authors});
 
@@ -386,20 +394,18 @@ class _AuthorsRow extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: const Color(0xFF00BCD4).withValues(alpha: 0.3)),
+                    border: Border.all(color: color.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.person_rounded,
-                          size: 12, color: Color(0xFF00BCD4)),
+                      const Icon(Icons.person_rounded, size: 12, color: color),
                       const SizedBox(width: 4),
                       Text(a,
                           style: const TextStyle(
-                              color: Color(0xFF00BCD4),
+                              color: color,
                               fontSize: 12,
                               fontWeight: FontWeight.w600)),
                     ],
@@ -413,6 +419,7 @@ class _AuthorsRow extends StatelessWidget {
 
 // ── Bibliographic meta ────────────────────────────────────────────────────────
 class _BibMeta extends StatelessWidget {
+  static const color = Color(0xFF6C3CE1);
   final Map<String, dynamic> paper;
   final Color cardBg;
   const _BibMeta({required this.paper, required this.cardBg});
@@ -443,8 +450,7 @@ class _BibMeta extends StatelessWidget {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: const Color(0xFF00BCD4).withValues(alpha: 0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Wrap(
         spacing: 20,
@@ -455,7 +461,7 @@ class _BibMeta extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(item.icon, size: 14, color: const Color(0xFF00BCD4)),
+                      Icon(item.icon, size: 14, color: color),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Column(
@@ -464,7 +470,7 @@ class _BibMeta extends StatelessWidget {
                             Text(item.label,
                                 style: const TextStyle(
                                     fontSize: 10,
-                                    color: Color(0xFF00BCD4),
+                                    color: color,
                                     fontWeight: FontWeight.bold)),
                             Text(item.value,
                                 style: TextStyle(
@@ -492,6 +498,7 @@ class _MetaItem {
 
 // ── Meta row ──────────────────────────────────────────────────────────────────
 class _MetaRow extends StatelessWidget {
+  static const color = Color(0xFF6C3CE1);
   final IconData icon;
   final String label;
   final String value;
@@ -504,16 +511,14 @@ class _MetaRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF00BCD4)),
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label,
                   style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFF00BCD4),
-                      fontWeight: FontWeight.bold)),
+                      fontSize: 10, color: color, fontWeight: FontWeight.bold)),
               Text(value,
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
             ],
@@ -526,6 +531,7 @@ class _MetaRow extends StatelessWidget {
 
 // ── References section ────────────────────────────────────────────────────────
 class _ReferencesSection extends StatelessWidget {
+  static const color = Color(0xFF6C3CE1);
   final Color cardBg;
   final String title;
   final IconData icon;
@@ -553,17 +559,15 @@ class _ReferencesSection extends StatelessWidget {
                 final idx = e.key;
                 final paper = e.value[keyName];
                 if (paper == null) return const SizedBox.shrink();
-                final authors =
-                    (paper['authors'] as List? ?? []).cast<String>();
+                final authors = parseStringList(paper['authors']);
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
                     radius: 14,
-                    backgroundColor:
-                        const Color(0xFF00BCD4).withValues(alpha: 0.15),
+                    backgroundColor: color.withValues(alpha: 0.15),
                     child: Text('${idx + 1}',
                         style: const TextStyle(
-                            color: Color(0xFF00BCD4),
+                            color: color,
                             fontSize: 11,
                             fontWeight: FontWeight.bold)),
                   ),
@@ -579,8 +583,8 @@ class _ReferencesSection extends StatelessWidget {
                     ].join(' · '),
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded,
-                      color: Color(0xFF00BCD4)),
+                  trailing:
+                      const Icon(Icons.chevron_right_rounded, color: color),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -595,6 +599,7 @@ class _ReferencesSection extends StatelessWidget {
 
 // ── Section card ──────────────────────────────────────────────────────────────
 class _Section extends StatelessWidget {
+  static const color = Color(0xFF6C3CE1);
   final Color cardBg;
   final String title;
   final IconData icon;
@@ -613,20 +618,17 @@ class _Section extends StatelessWidget {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: const Color(0xFF00BCD4).withValues(alpha: 0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Icon(icon, color: const Color(0xFF00BCD4), size: 15),
+            Icon(icon, color: color, size: 15),
             const SizedBox(width: 6),
             Text(title,
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: Color(0xFF00BCD4))),
+                    fontWeight: FontWeight.bold, fontSize: 12, color: color)),
           ]),
           const SizedBox(height: 12),
           child,

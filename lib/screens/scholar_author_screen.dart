@@ -1,5 +1,7 @@
 // lib/screens/scholar_author_screen.dart
 import 'package:flutter/material.dart';
+
+import 'package:bpp/core/json_utils.dart';
 import '../services/scholar_service.dart';
 import 'scholar_detail_screen.dart';
 
@@ -12,7 +14,7 @@ class ScholarAuthorScreen extends StatefulWidget {
 }
 
 class _ScholarAuthorScreenState extends State<ScholarAuthorScreen> {
-  static const color = Color(0xFF00BCD4);
+  static const color = Color(0xFF6C3CE1);
   List<dynamic> _papers = [];
   bool _loading = true;
   String? _error;
@@ -111,8 +113,7 @@ class _ScholarAuthorScreenState extends State<ScholarAuthorScreen> {
                                   const SizedBox(height: 12),
                                   ..._papers.map((p) {
                                     final authors =
-                                        (p['authors'] as List? ?? [])
-                                            .cast<String>();
+                                        parseStringList(p['authors']);
                                     return GestureDetector(
                                       onTap: () => Navigator.push(
                                           context,

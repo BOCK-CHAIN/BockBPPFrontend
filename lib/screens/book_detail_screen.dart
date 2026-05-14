@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../core/session.dart';
 import '../services/book_service.dart';
 import 'book_form_screen.dart';
+import 'my_contributions_screen.dart';
 
 class BookDetailScreen extends StatefulWidget {
   final String id;
@@ -258,7 +259,27 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                                       height: 1.25)),
                               const SizedBox(height: 6),
                               GestureDetector(
-                                onTap: () {},
+                                onTap: () {
+                                  final uploader =
+                                      _book!['uploader'] as Map<String, dynamic>?;
+                                  final targetId = (uploader?['id'] ??
+                                          _book!['created_by'] ??
+                                          _book!['uploader_id'])
+                                      ?.toString();
+                                  if (targetId == null || targetId.isEmpty) {
+                                    _showSnack('Author contributions unavailable');
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => MyContributionsScreen.user(
+                                        userId: targetId,
+                                        userName: _book!['author']?.toString(),
+                                      ),
+                                    ),
+                                  );
+                                },
                                 child: Text(_book!['author'] ?? '',
                                     style: const TextStyle(
                                         color: Color(0xFFCDB4FF),
