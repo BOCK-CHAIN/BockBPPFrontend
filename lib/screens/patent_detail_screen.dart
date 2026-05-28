@@ -1,9 +1,12 @@
 // lib/screens/patent_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../core/session.dart';
+import '../core/constants.dart';
 import '../services/patent_service.dart';
+import '../widgets/share_bottom_sheet.dart';
 import 'patent_form_screen.dart';
 
 class PatentDetailScreen extends StatefulWidget {
@@ -30,16 +33,19 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
 
   Future<void> _init() async {
     _currentUserId = await Session.getUserId();
+    if (!mounted) return;
     await _load();
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final data = await PatentService.getPatent(widget.id);
+      if (!mounted) return;
       setState(() => _patent = data);
     } catch (e) {
       setState(() => _error = e.toString());
@@ -84,6 +90,19 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  // ── FIXED: uses ShareConstants instead of hardcoded domain ────────────────
+  void _share() {
+    final title = _patent?['title'] ?? 'Patent';
+    final link = ShareConstants.patentLink(widget.id);
+    final text = '💡 "$title"\n\n$link';
+    ShareBottomSheet.show(
+      context,
+      link: link,
+      text: text,
+      label: 'Link to this patent',
+    );
   }
 
   Color _statusColor(String? s) {
@@ -152,7 +171,21 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                         size: 20),
                                   ),
                                   const Spacer(),
+                                  GestureDetector(
+                                    onTap: _share,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(10)),
+                                      child: const Icon(Icons.share_rounded,
+                                          color: Colors.white, size: 18),
+                                    ),
+                                  ),
                                   if (_isOwner) ...[
+                                    const SizedBox(width: 10),
                                     GestureDetector(
                                       onTap: () async {
                                         await Navigator.push(
@@ -225,7 +258,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                             child: ListView(
                                 padding: const EdgeInsets.all(20),
                                 children: [
-                                  // ── Top chips ──────────────────────────
                                   Wrap(spacing: 8, runSpacing: 8, children: [
                                     if (_patent!['category'] != null)
                                       _chip(Icons.category_rounded,
@@ -244,11 +276,7 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                           'PDF attached'),
                                   ]),
                                   const SizedBox(height: 20),
-
-                                  // ── Inventors ──────────────────────────
                                   _buildInventors(cardBg),
-
-                                  // ── Content sections ───────────────────
                                   if (_patent!['abstract'] != null)
                                     _textSection(
                                         cardBg,
@@ -279,8 +307,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                         'Detailed Description',
                                         Icons.article_rounded,
                                         _patent!['detailed_description']),
-
-                                  // ── Keywords ───────────────────────────
                                   if ((_patent!['keywords'] as List?)
                                           ?.isNotEmpty ==
                                       true) ...[
@@ -316,11 +342,7 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                   ],
-
-                                  // ── Citations ──────────────────────────
                                   _buildCitations(cardBg),
-
-                                  // ── Document (Scholar style) ───────────
                                   if (_patent!['file_url'] != null) ...[
                                     _sectionCard(
                                       cardBg,
@@ -366,7 +388,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     );
   }
 
-  // ── Inventors ───────────────────────────────────────────────────────────────
   Widget _buildInventors(Color cardBg) {
     final inventors = parseJsonList(_patent!['patent_inventors'])
         .map((pi) => pi['inventors'] as Map<String, dynamic>?)
@@ -403,7 +424,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     ]);
   }
 
-  // ── Citations ───────────────────────────────────────────────────────────────
   Widget _buildCitations(Color cardBg) {
     final cited = parseJsonList(_patent!['citations_from'])
         .map((c) => c['cited_patent'] as Map<String, dynamic>?)
@@ -420,7 +440,9 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
           cardBg,
           'Cites (${cited.length})',
           Icons.format_list_numbered_rounded,
-          Column(children: cited.map((p) => _citationRow(p)).toList()),
+          Builder(
+              builder: (ctx) => Column(
+                  children: cited.map((p) => _citationRow(ctx, p)).toList())),
         ),
         const SizedBox(height: 12),
       ],
@@ -429,29 +451,46 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
           cardBg,
           'Cited By (${citedBy.length})',
           Icons.call_received_rounded,
-          Column(children: citedBy.map((p) => _citationRow(p)).toList()),
+          Builder(
+              builder: (ctx) => Column(
+                  children: citedBy.map((p) => _citationRow(ctx, p)).toList())),
         ),
         const SizedBox(height: 12),
       ],
     ]);
   }
 
-  Widget _citationRow(Map<String, dynamic> p) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          const Icon(Icons.lightbulb_outline_rounded, color: color, size: 14),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(p['title'] ?? '',
-                  style: const TextStyle(fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis)),
-        ]),
-      );
+  Widget _citationRow(BuildContext context, Map<String, dynamic> p) {
+    final id = p['id']?.toString();
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child:
+            const Icon(Icons.lightbulb_outline_rounded, color: color, size: 14),
+      ),
+      title: Text(
+        p['title'] ?? '',
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: id != null
+          ? const Icon(Icons.chevron_right_rounded, color: color)
+          : null,
+      onTap: id != null
+          ? () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => PatentDetailScreen(id: id)),
+              )
+          : null,
+    );
+  }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  /// Text content section — wraps plain text in a _sectionCard
   Widget _textSection(
       Color cardBg, String label, IconData icon, String? content) {
     if (content == null || content.isEmpty) return const SizedBox.shrink();
@@ -468,7 +507,6 @@ class _PatentDetailScreenState extends State<PatentDetailScreen> {
     ]);
   }
 
-  /// Scholar-style section card with icon + title header
   Widget _sectionCard(Color cardBg, String title, IconData icon, Widget child) {
     return Container(
       width: double.infinity,

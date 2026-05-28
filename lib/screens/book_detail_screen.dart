@@ -2,9 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
 import '../core/session.dart';
+import '../core/constants.dart';
 import '../services/book_service.dart';
+import '../widgets/share_bottom_sheet.dart';
 import 'book_form_screen.dart';
 import 'my_contributions_screen.dart';
 
@@ -34,10 +35,12 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
 
   Future<void> _init() async {
     _currentUserId = await Session.getUserId();
+    if (!mounted) return;
     await _load();
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -49,18 +52,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           _book = book;
           _loading = false;
         });
-        // Load similar books in background
         if (book['genre'] != null) {
           final sim = await BookService.getSimilar(book['genre'], widget.id);
           if (mounted) setState(() => _similar = sim);
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 
@@ -95,7 +98,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
   }
 
-  // Open PDF in browser (read online)
   Future<void> _readOnline() async {
     final url = _book?['file_url'] as String?;
     if (url == null) {
@@ -110,14 +112,12 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
   }
 
-  // Download PDF
   Future<void> _download() async {
     final url = _book?['file_url'] as String?;
     if (url == null) {
       _showSnack('No PDF available for this book');
       return;
     }
-    // Launch the direct URL — browser will trigger download for PDF
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -126,15 +126,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
   }
 
-  // Share
-  Future<void> _share() async {
+  // ── FIXED: uses ShareConstants instead of hardcoded domain ────────────────
+  void _share() {
     final title = _book?['title'] ?? 'Book';
     final author = _book?['author'] ?? '';
-    final fileUrl = _book?['file_url'] as String?;
-    final text = fileUrl != null
-        ? '📖 "$title" by $author\n\nRead / Download PDF:\n$fileUrl'
-        : '📖 "$title" by $author — shared via BPP';
-    await Share.share(text, subject: title);
+    final link = ShareConstants.bookLink(widget.id);
+    final text = '📖 "$title" by $author\n\n$link';
+    ShareBottomSheet.show(
+      context,
+      link: link,
+      text: text,
+      label: 'Link to this book',
+    );
   }
 
   void _showSnack(String msg) {
@@ -184,7 +187,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // ── Hero header ────────────────────────────────────────────────
             SliverToBoxAdapter(
               child: Container(
                 width: double.infinity,
@@ -203,7 +205,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Back + actions
                     Row(children: [
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
@@ -225,12 +226,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       ],
                     ]),
                     const SizedBox(height: 20),
-
-                    // Cover + title block
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // Cover
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: coverUrl != null
@@ -246,7 +244,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                               : _placeholderCover(width: 110, height: 155),
                         ),
                         const SizedBox(width: 18),
-
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,20 +257,22 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                               const SizedBox(height: 6),
                               GestureDetector(
                                 onTap: () {
-                                  final uploader =
-                                      _book!['uploader'] as Map<String, dynamic>?;
+                                  final uploader = _book!['uploader']
+                                      as Map<String, dynamic>?;
                                   final targetId = (uploader?['id'] ??
                                           _book!['created_by'] ??
                                           _book!['uploader_id'])
                                       ?.toString();
                                   if (targetId == null || targetId.isEmpty) {
-                                    _showSnack('Author contributions unavailable');
+                                    _showSnack(
+                                        'Author contributions unavailable');
                                     return;
                                   }
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => MyContributionsScreen.user(
+                                      builder: (_) =>
+                                          MyContributionsScreen.user(
                                         userId: targetId,
                                         userName: _book!['author']?.toString(),
                                       ),
@@ -297,10 +296,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 22),
-
-                    // Action buttons row
                     Row(children: [
-                      // Read Online
                       Expanded(
                         child: _actionBtn(
                           icon: Icons.play_arrow_rounded,
@@ -311,7 +307,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Download PDF
                       Expanded(
                         child: _actionBtn(
                           icon: Icons.download_rounded,
@@ -322,20 +317,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Share
                       _squareBtn(Icons.share_rounded, _share),
                     ]),
                   ],
                 ),
               ),
             ),
-
-            // ── Body ───────────────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // About Book tab label
                   Text('ABOUT BOOK',
                       style: TextStyle(
                           color: _purple,
@@ -345,8 +336,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   const SizedBox(height: 6),
                   Divider(color: _purple.withValues(alpha: 0.3)),
                   const SizedBox(height: 12),
-
-                  // Description
                   if (desc != null && desc.isNotEmpty) ...[
                     AnimatedCrossFade(
                       duration: const Duration(milliseconds: 250),
@@ -376,12 +365,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     ),
                     const SizedBox(height: 20),
                   ],
-
-                  // Metadata grid
                   _metaGrid(cardBg),
                   const SizedBox(height: 28),
-
-                  // Similar Books
                   if (_similar.isNotEmpty) ...[
                     Text('You may also like',
                         style: TextStyle(
@@ -428,7 +413,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       if (name.isNotEmpty) rows.add(_MetaRow('Uploaded by', name));
     }
     if (_book!['file_url'] != null) rows.add(_MetaRow('File', 'PDF'));
-
     if (rows.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -576,7 +560,6 @@ class _MetaRow {
   const _MetaRow(this.label, this.value);
 }
 
-// ── Similar book card ─────────────────────────────────────────────────────────
 class _SimilarCard extends StatelessWidget {
   final Map<String, dynamic> book;
   const _SimilarCard({required this.book});

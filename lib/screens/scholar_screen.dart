@@ -1,6 +1,6 @@
 // lib/screens/scholar_screen.dart
 import 'package:flutter/material.dart';
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../services/scholar_service.dart';
 import 'scholar_detail_screen.dart';
 import 'scholar_form_screen.dart';
@@ -136,7 +136,7 @@ class _ScholarScreenState extends State<ScholarScreen> {
                       const Icon(Icons.science_rounded,
                           color: Colors.white, size: 24),
                       const SizedBox(width: 8),
-                      const Text('Scholar',
+                      const Text('Papers',
                           style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,

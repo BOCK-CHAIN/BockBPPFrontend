@@ -2,8 +2,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:bpp/core/json_utils.dart';
-import 'package:bpp/core/pdf_utils.dart';
+import 'package:scholar/core/pdf_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../services/scholar_service.dart';
 
 class ScholarFormScreen extends StatefulWidget {

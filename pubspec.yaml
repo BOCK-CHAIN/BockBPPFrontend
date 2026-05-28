@@ -1,5 +1,5 @@
-name: bpp
-description: BPP - Library, Scholar & Patents Platform
+name: scholar
+description: SCHOLAR - Library, Papers & Patents Platform
 
 publish_to: "none"
 version: 1.0.0+1

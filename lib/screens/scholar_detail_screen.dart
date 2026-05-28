@@ -2,9 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../core/session.dart';
+import '../core/constants.dart';
 import '../services/scholar_service.dart';
+import '../widgets/share_bottom_sheet.dart';
 import 'scholar_author_screen.dart';
 import 'scholar_form_screen.dart';
 
@@ -31,22 +33,26 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
   }
 
   Future<void> _init() async {
-    _currentUserId = await Session.getUserId();
+    final userId = await Session.getUserId();
+    if (!mounted) return;
+    setState(() => _currentUserId = userId);
     await _load();
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final data = await ScholarService.getPaper(widget.id);
+      if (!mounted) return;
       setState(() => _paper = data);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -95,6 +101,19 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
     }
   }
 
+  // ── FIXED: uses ShareConstants instead of hardcoded domain ────────────────
+  void _share() {
+    final title = _paper?['title'] ?? 'Paper';
+    final link = ShareConstants.scholarLink(widget.id);
+    final text = '📄 "$title"\n\n$link';
+    ShareBottomSheet.show(
+      context,
+      link: link,
+      text: text,
+      label: 'Link to this paper',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -137,7 +156,19 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.white)),
                   const Spacer(),
+                  GestureDetector(
+                    onTap: _share,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.share_rounded,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
                   if (_isOwner) ...[
+                    const SizedBox(width: 10),
                     GestureDetector(
                       onTap: () async {
                         await Navigator.push(
@@ -243,7 +274,6 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                     ),
                                     const SizedBox(height: 16),
                                   ],
-                                  // ── Organisation section ───────────────
                                   if (_paper!['org_name'] != null ||
                                       _paper!['org_department'] != null ||
                                       _paper!['org_location'] != null ||
@@ -321,7 +351,6 @@ class _ScholarDetailScreenState extends State<ScholarDetailScreen> {
                                     refs: _paper!['cited_by'] as List? ?? [],
                                     keyName: 'citing_paper',
                                   ),
-                                  // ── Document at bottom ─────────────────
                                   if (_paper!['file_url'] != null) ...[
                                     const SizedBox(height: 16),
                                     _Section(
@@ -560,6 +589,7 @@ class _ReferencesSection extends StatelessWidget {
                 final paper = e.value[keyName];
                 if (paper == null) return const SizedBox.shrink();
                 final authors = parseStringList(paper['authors']);
+                final paperId = paper['id']?.toString();
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
@@ -583,13 +613,17 @@ class _ReferencesSection extends StatelessWidget {
                     ].join(' · '),
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                   ),
-                  trailing:
-                      const Icon(Icons.chevron_right_rounded, color: color),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => ScholarDetailScreen(id: paper['id'])),
-                  ),
+                  trailing: paperId != null
+                      ? const Icon(Icons.chevron_right_rounded, color: color)
+                      : null,
+                  onTap: paperId != null
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    ScholarDetailScreen(id: paperId)),
+                          )
+                      : null,
                 );
               }).toList(),
             ),

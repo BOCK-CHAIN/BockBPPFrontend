@@ -1,6 +1,6 @@
 // lib/screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../core/session.dart';
 import '../services/book_service.dart';
 import '../services/patent_service.dart';
@@ -129,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _patentsError;
   String? _papersError;
 
-  static const _tabs = ['Library', 'Scholar', 'Patents'];
+  static const _tabs = ['Library', 'Papers', 'Patents'];
   static const _years = ['2024', '2023', '2022', '2021', '2020', '2019'];
   static const _libGenres = [
     'Fiction',
@@ -464,7 +464,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           t: t,
                           icon: Icons.science_rounded,
                           label: 'Recently Added',
-                          sub: 'Scholar',
+                          sub: 'Papers',
                           ctrl: _scholarScroll,
                           isWide: isWide,
                           onScroll: (d) => _scrollBy(
@@ -481,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       else if (_papers.isEmpty)
                         _EmptyRow(
                             t: t,
-                            label: 'No existing scholar',
+                            label: 'No existing papers',
                             rowHeight: paperRowH)
                       else
                         _PaperCardRow(
@@ -590,7 +590,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           Center(
-              child: Text('BPP',
+              child: Text('Scholar',
                   style: TextStyle(
                       color: t.purpleHi,
                       fontSize: 56,
@@ -599,7 +599,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       height: 1))),
           const SizedBox(height: 6),
           Center(
-              child: Text('Library  ·  Scholar  ·  Patents',
+              child: Text('Library  ·  Papers  ·  Patents',
                   style: TextStyle(
                       color: t.textMut, fontSize: 12, letterSpacing: 2.5))),
           SizedBox(height: isWide ? 40 : 32),
@@ -806,7 +806,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 10,
         children: [
-          Text('BPP',
+          Text('Scholar',
               style: TextStyle(
                   color: t.purpleHi,
                   fontSize: 13,

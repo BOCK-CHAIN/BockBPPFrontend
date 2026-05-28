@@ -1,7 +1,7 @@
 // lib/screens/scholar_author_screen.dart
 import 'package:flutter/material.dart';
 
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../services/scholar_service.dart';
 import 'scholar_detail_screen.dart';
 

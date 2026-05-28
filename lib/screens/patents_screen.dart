@@ -1,7 +1,7 @@
 // lib/screens/patents_screen.dart
 import 'package:flutter/material.dart';
 
-import 'package:bpp/core/json_utils.dart';
+import 'package:scholar/core/json_utils.dart';
 import '../services/patent_service.dart';
 import 'patent_detail_screen.dart';
 import 'patent_form_screen.dart';

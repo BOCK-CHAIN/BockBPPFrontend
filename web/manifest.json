@@ -1,11 +1,11 @@
 {
-    "name": "bpp_frontend",
-    "short_name": "bpp_frontend",
+    "name": "Scholar",
+    "short_name": "Scholar",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#6C3CE1",
+    "theme_color": "#6C3CE1",
+    "description": "SCHOLAR - Library, Papers & Patents Platform",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

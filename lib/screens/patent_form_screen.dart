@@ -2,7 +2,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:bpp/core/pdf_utils.dart';
+import 'package:scholar/core/pdf_utils.dart';
 import '../services/patent_service.dart';
 
 class PatentFormScreen extends StatefulWidget {

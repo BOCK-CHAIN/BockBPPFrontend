@@ -253,7 +253,7 @@ class _MyContributionsScreenState extends State<MyContributionsScreen> {
                                   if (_papers.isNotEmpty) ...[
                                     _SectionHeader(
                                       icon: Icons.science_rounded,
-                                      label: 'Scholar Papers',
+                                      label: 'Papers',
                                       count: _papers.length,
                                       color: const Color(0xFF00BCD4),
                                     ),
