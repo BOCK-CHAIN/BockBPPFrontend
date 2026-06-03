@@ -10,20 +10,20 @@ import 'screens/patent_detail_screen.dart';
 import 'widgets/skeleton.dart';
 
 void main() {
-  runApp(const BppApp());
+  runApp(const ScholarApp());
 }
 
-class BppApp extends StatefulWidget {
-  const BppApp({super.key});
+class ScholarApp extends StatefulWidget {
+  const ScholarApp({super.key});
 
-  static _BppAppState? of(BuildContext context) =>
-      context.findAncestorStateOfType<_BppAppState>();
+  static _ScholarAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_ScholarAppState>();
 
   @override
-  State<BppApp> createState() => _BppAppState();
+  State<ScholarApp> createState() => _ScholarAppState();
 }
 
-class _BppAppState extends State<BppApp> {
+class _ScholarAppState extends State<ScholarApp> {
   ThemeMode _themeMode = ThemeMode.dark;
 
   void toggleTheme() {
@@ -36,7 +36,7 @@ class _BppAppState extends State<BppApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BPP',
+      title: 'Scholar',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       // ── KEY FIX: stop MaterialApp from trying to parse the URL fragment

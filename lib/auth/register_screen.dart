@@ -255,7 +255,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             fontWeight: FontWeight.bold,
                             color: Colors.white)),
                     const SizedBox(height: 4),
-                    const Text('Join BPP today',
+                    const Text('Join Scholar today',
                         style: TextStyle(fontSize: 15, color: Colors.white70)),
                   ],
                 ),

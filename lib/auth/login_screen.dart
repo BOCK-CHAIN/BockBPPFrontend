@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('BPP',
+                    Text('Scholar',
                         style: TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
